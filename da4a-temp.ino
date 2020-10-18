@@ -15,37 +15,48 @@ const int START_DELAY_IN_MS = 1000;
 const String DELIMITER_BETWEEN_REQUEST_AND_RESPONSE = String(char(13)) + String(char(13)) + String(char(10)) + String("OK");
 
 boolean isSent = false;
-long lastcmd = millis();
 
 void setup(){
+  pinMode(DHT11_PIN, INPUT);
   Serial.begin(9600);               
   SIM800.begin(9600); 
   delay(1000); 
   Serial.println("Start!");
   ConnectToSim800l();
   SendRequestAndPrintResponse("AT+CMGF=1");  
-  // SendRequestAndPrintResponse("AT+CSCS=\"GSM\""); 
-  // Serial.println(GetSignalLevel()); 
   SendRequestAndPrintResponse("AT+CNMI=1,2,0,0,0");
   // sms("Hello world", "+79296135951");
 }
 
 void loop(){
-  // if (SIM800.available())           // Ожидаем прихода данных (ответа) от модема...
-  //   Serial.write(SIM800.read());    // ...и выводим их в Serial
-  // if (Serial.available())           // Ожидаем команды по Serial...
-  //   SIM800.write(Serial.read());    // ...и отправляем полученную команду модему
+  delay(5000);
+  int chk = DHT.read11(DHT11_PIN);
+  int temperature = (int)DHT.temperature;
+  int humidity = (int)DHT.humidity;
+  PrintDhtParameters(temperature, humidity);  
 
-  // if (millis() - lastcmd > 5000) {  // Прошло ли 5 секунд
-  //   lastcmd = millis();             // Фиксируем время
-  //   SIM800.println("AT+CSQ");       // Запрашиваем информацию о качестве сигнала
+  // if 
+
+  // if (millis() - lastcmd > 5000) {
+  //   PrintSmsText();
   // }
-
-  if (millis() - lastcmd > 5000) {
-    PrintSmsText();
-  }
   
 }
+
+void PrintTemperature(int temperature){
+  Serial.print("Temperature = ");
+  Serial.println(temperature);  
+}
+
+void PrintHumidity(int humidity){
+  Serial.print("Humidity = ");
+  Serial.println(humidity);  
+}
+
+void PrintDhtParameters(int temperature, int humidity){
+  PrintTemperature(temperature);
+  PrintHumidity(humidity);
+} 
 
 void sms(String text, String phone) 
 {    
