@@ -45,12 +45,10 @@ void loop(){
   PrintDhtParameters(temperature, humidity);  
 
   String receivedText = GetReceivedText(); 
-  PrintlnInDebug(receivedText);
   if (receivedText == "")
     return;
   else if (receivedText == "Info") {
-    PrintlnInDebug("Есть Info!");
-    sendText = "Signal=" + GetSignalLevel() + " temperature=" + String(temperature) + " humidity=" + String(humidity);
+    sendText = "Signal=" + GetSignalLevel() + "; temperature=" + String(temperature) + "; humidity=" + String(humidity);
     SendSms(sendText);
   }  
   PrintlnInDebug(sendText);
@@ -117,6 +115,7 @@ String GetResponse(){
 }
 
 // Получить текст сообщения.
+// Он находится между последним символом №13 и предпоследним символом №10.
 String GetReceivedText()
 {
   delay(DELAY_IN_MS); 
@@ -127,16 +126,10 @@ String GetReceivedText()
   {
     text += char(simModule.read());  
   }
-  // PrintInDebug("Сообщение: ");
-  // PrintlnInDebug(text);
   int newLineLastIndex = text.lastIndexOf(String(char(13)));
-  // PrintlnInDebug(String(newLineLastIndex));
   text = text.substring(0, newLineLastIndex);
-  // PrintlnInDebug(text);
   int firstLetterIndex = text.lastIndexOf(String(char(10))) + 1;
-  // PrintlnInDebug(String(firstLetterIndex));
-  text = text.substring(firstLetterIndex);
-  // PrintlnInDebug(String(text.length()));
+  text = text.substring(firstLetterIndex);                        // для "надёжности" не используется return text.substring()
   return text;
 }
 
