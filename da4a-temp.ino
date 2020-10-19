@@ -17,8 +17,9 @@ const String DELIMITER_BETWEEN_REQUEST_AND_RESPONSE =
 
 dht DHT;                                  // класс датчика DHT11
 SoftwareSerial simModule(RX_PIN, TX_PIN); // класс обмена данными с модулем SIM800L
-boolean isSent = false;                   // флаг отправки сообщения (только для режима тестирования)
+boolean isSend = false;                   // флаг отправки сообщения (только для режима тестирования)
 boolean isDebug = true;                   // флаг режима отладки (включён вывод в последовательный порт)
+String sendText;                          // отправляемое сообщение
 
 void setup(){
   pinMode(DHT11_PIN, INPUT);
@@ -39,13 +40,24 @@ void loop(){
 
   int chk = DHT.read11(DHT11_PIN);
   int temperature = (int)DHT.temperature;
-  int humidity = (int)DHT.humidity;
-  
+  int humidity = (int)DHT.humidity; 
+
   PrintDhtParameters(temperature, humidity);  
+
+  String receivedText = GetReceivedText(); 
+  PrintlnInDebug(receivedText);
+  if (receivedText == "")
+    return;
+  else if (receivedText == "Info") {
+    PrintlnInDebug("Есть Info!");
+    sendText = "Signal=" + GetSignalLevel() + " temperature=" + String(temperature) + " humidity=" + String(humidity);
+    SendSms(sendText);
+  }  
+  PrintlnInDebug(sendText);
 }
 
 // Отправить сообщение.
-void sms(String text) 
+void SendSms(String text) 
 {    
   PrintlnInDebug("SMS send started");    
   simModule.println("AT+CMGS=\"" + PHONE_NUMBER + "\"");    
@@ -104,22 +116,28 @@ String GetResponse(){
   return response;
 }
 
-// Вывести в последовательный порт текст полученного сообщения.
-void PrintSmsText()
+// Получить текст сообщения.
+String GetReceivedText()
 {
   delay(DELAY_IN_MS); 
   if (!simModule.available())
-    return;
+    return "";
   String text = ""; 
   while(simModule.available()) 
   {
     text += char(simModule.read());  
   }
+  // PrintInDebug("Сообщение: ");
+  // PrintlnInDebug(text);
   int newLineLastIndex = text.lastIndexOf(String(char(13)));
+  // PrintlnInDebug(String(newLineLastIndex));
   text = text.substring(0, newLineLastIndex);
+  // PrintlnInDebug(text);
   int firstLetterIndex = text.lastIndexOf(String(char(10))) + 1;
+  // PrintlnInDebug(String(firstLetterIndex));
   text = text.substring(firstLetterIndex);
-  PrintlnInDebug(text);
+  // PrintlnInDebug(String(text.length()));
+  return text;
 }
 
 // Очистка последовательного порта от данных.
@@ -131,14 +149,14 @@ void ClearSerialPort(){
 }
 
 // Вывести текст в последовательный порт в режиме отладки.
-void PrintInDebug(text){
+void PrintInDebug(String text){
   if (isDebug){
     Serial.print(text);
   }
 }
 
 // Вывести текст с новой строкой в последовательный порт в режиме отладки.
-void PrintlnInDebug(text){
+void PrintlnInDebug(String text){
   if (isDebug){
     Serial.println(text);
   }
@@ -146,6 +164,6 @@ void PrintlnInDebug(text){
 
 // Напечатать значения температуры и влажности.
 void PrintDhtParameters(int temperature, int humidity){
-  PrintlnInDebug("Temperature = " + temperature);
-  PrintlnInDebug("Humidity = " + humidity);
+  PrintlnInDebug("Temperature = " + String(temperature));
+  PrintlnInDebug("Humidity = " + String(humidity));  
 } 
