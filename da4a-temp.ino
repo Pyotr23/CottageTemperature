@@ -2,100 +2,90 @@
 #include <SoftwareSerial.h>
 
 #define DHT11_PIN 4
-#define ALARM_PIN 8
 #define RX_PIN 2
 #define TX_PIN 3
 
-dht DHT;
-SoftwareSerial SIM800(RX_PIN, TX_PIN);
-
 const int HIGH_ALARM_HUMIDITY_TRESHOLD = 30;
 const int HIGH_ARARM_TEMPERATURE_TRESHOLD = 27;
-const int START_DELAY_IN_MS = 1000;
-const String DELIMITER_BETWEEN_REQUEST_AND_RESPONSE = String(char(13)) + String(char(13)) + String(char(10)) + String("OK");
+const int DELAY_IN_MS = 500;   
+const int BIG_DELAY_IN_MS = 5000;   
+const String PHONE_NUMBER = "+79296135951";            
 
-boolean isSent = false;
+// символы с последующим сообщением ОК в ответе модуля SIM800L
+const String DELIMITER_BETWEEN_REQUEST_AND_RESPONSE = 
+  String(char(13)) + String(char(13)) + String(char(10)) + String("OK");  
+
+dht DHT;                                  // класс датчика DHT11
+SoftwareSerial simModule(RX_PIN, TX_PIN); // класс обмена данными с модулем SIM800L
+boolean isSent = false;                   // флаг отправки сообщения (только для режима тестирования)
+boolean isDebug = true;                   // флаг режима отладки (включён вывод в последовательный порт)
 
 void setup(){
   pinMode(DHT11_PIN, INPUT);
+
   Serial.begin(9600);               
-  SIM800.begin(9600); 
-  delay(1000); 
-  Serial.println("Start!");
-  ConnectToSim800l();
+  simModule.begin(9600); 
+
+  delay(DELAY_IN_MS); 
+  PrintlnInDebug("Start!");
+  ConnectToSimModule();
   SendRequestAndPrintResponse("AT+CMGF=1");  
   SendRequestAndPrintResponse("AT+CNMI=1,2,0,0,0");
   // sms("Hello world", "+79296135951");
 }
 
 void loop(){
-  delay(5000);
+  delay(BIG_DELAY_IN_MS);
+
   int chk = DHT.read11(DHT11_PIN);
   int temperature = (int)DHT.temperature;
   int humidity = (int)DHT.humidity;
-  PrintDhtParameters(temperature, humidity);  
-
-  // if 
-
-  // if (millis() - lastcmd > 5000) {
-  //   PrintSmsText();
-  // }
   
+  PrintDhtParameters(temperature, humidity);  
 }
 
-void PrintTemperature(int temperature){
-  Serial.print("Temperature = ");
-  Serial.println(temperature);  
-}
-
-void PrintHumidity(int humidity){
-  Serial.print("Humidity = ");
-  Serial.println(humidity);  
-}
-
-void PrintDhtParameters(int temperature, int humidity){
-  PrintTemperature(temperature);
-  PrintHumidity(humidity);
-} 
-
-void sms(String text, String phone) 
+// Отправить сообщение.
+void sms(String text) 
 {    
-  Serial.println("SMS send started");    
-  SIM800.println("AT+CMGS=\"" + phone + "\"");    
-  delay(1000);    
-  SIM800.print(text);    
-  delay(300);    
-  SIM800.print((char)26);    
-  delay(300);    
-  Serial.println("SMS send finish");    
-  delay(3000);  
+  PrintlnInDebug("SMS send started");    
+  simModule.println("AT+CMGS=\"" + PHONE_NUMBER + "\"");    
+  delay(DELAY_IN_MS);    
+  simModule.print(text);    
+  delay(DELAY_IN_MS);    
+  simModule.print((char)26);    
+  delay(DELAY_IN_MS);    
+  PrintlnInDebug("SMS send finish.");   
 }
 
-void ConnectToSim800l(){
-  while(!SIM800.available()){             
-    SIM800.println("AT");
-    Serial.println("Connecting...");         
-    delay(1000);    
+// Циклически пытаться соединиться с SIM800L до успеха. 
+void ConnectToSimModule(){
+  while(!simModule.available()){             
+    simModule.println("AT");
+    PrintlnInDebug("Connecting...");         
+    delay(DELAY_IN_MS);    
   }
-  Serial.println("Connected!");           
+  PrintlnInDebug("Connected!");           
   PrintResponse();  
 }
 
+// Отправить запрос к SIM800L и напечатать ответ.
 void SendRequestAndPrintResponse(String request){
-  SIM800.println(request);
-  delay(1000);
+  simModule.println(request);
+  delay(DELAY_IN_MS);
   PrintResponse();
 }
 
+// Напечатать ответ от SIM800L в одну строку с двоеточием перед ОК.
 void PrintResponse(){  
   String response = GetResponse();
   response.replace(DELIMITER_BETWEEN_REQUEST_AND_RESPONSE, ": OK");
-  Serial.print(response);    
+  PrintInDebug(response);    
 }
 
+// Получить уровень сигнала мобильной связи в формате <XX,X>.
 String GetSignalLevel(){
-  SIM800.println("AT+CSQ");
-  delay(1000);
+  simModule.println("AT+CSQ");
+  delay(DELAY_IN_MS);
   String response = GetResponse();
   int signalStartIndex = response.indexOf(':') + 2;
   response = response.substring(signalStartIndex);
@@ -103,34 +93,33 @@ String GetSignalLevel(){
   return response.substring(0, signalEndIndex);
 }
 
+// Прочитать ответ от SIM800L.
 String GetResponse(){
   String response = "";
-  while(SIM800.available()){ 
-    char symbolNumber = SIM800.read();
+  while(simModule.available()){ 
+    char symbolNumber = simModule.read();
     if (symbolNumber != 0)           
       response += char(symbolNumber); 
   }  
   return response;
 }
 
+// Вывести в последовательный порт текст полученного сообщения.
 void PrintSmsText()
 {
-  delay(500); 
-  if (!SIM800.available())
+  delay(DELAY_IN_MS); 
+  if (!simModule.available())
     return;
   String text = ""; 
-  while(SIM800.available()) 
+  while(simModule.available()) 
   {
-    text += char(SIM800.read());  
+    text += char(simModule.read());  
   }
   int newLineLastIndex = text.lastIndexOf(String(char(13)));
   text = text.substring(0, newLineLastIndex);
-  // Serial.println(text);
   int firstLetterIndex = text.lastIndexOf(String(char(10))) + 1;
-  // Serial.println(firstLetterIndex);
-  // Serial.println(text.length());
   text = text.substring(firstLetterIndex);
-  Serial.println(text);
+  PrintlnInDebug(text);
 }
 
 // Очистка последовательного порта от данных.
@@ -140,3 +129,23 @@ void ClearSerialPort(){
     Serial.read(); 
   }
 }
+
+// Вывести текст в последовательный порт в режиме отладки.
+void PrintInDebug(text){
+  if (isDebug){
+    Serial.print(text);
+  }
+}
+
+// Вывести текст с новой строкой в последовательный порт в режиме отладки.
+void PrintlnInDebug(text){
+  if (isDebug){
+    Serial.println(text);
+  }
+}
+
+// Напечатать значения температуры и влажности.
+void PrintDhtParameters(int temperature, int humidity){
+  PrintlnInDebug("Temperature = " + temperature);
+  PrintlnInDebug("Humidity = " + humidity);
+} 
