@@ -1,16 +1,17 @@
 #include <dht.h>
 #include <SoftwareSerial.h>
 
-#define RX_PIN 2
-#define TX_PIN 3
-#define DHT11_PIN 4
-#define RELE_PIN 5
+const int RX_PIN = 2;     // пины для общения
+const int TX_PIN = 3;     // с модулем SIM800L
 
-const int HIGH_TEMPERATURE_TRESHOLD = 26;
-const int LOW_TEMPERATURE_TRESHOLD = 23;
-const int DELAY_IN_MS = 500;   
-const int BIG_DELAY_IN_MS = 5000;   
-const String PHONE_NUMBER = "+79296135951";            
+const int DHT11_PIN = 4;  // пин датчика температуры и влажности
+const int RELAY_PIN = 5;  // пин реле
+
+const int HIGH_TEMPERATURE_TRESHOLD = 26;   // значение верхнего температурного порога
+const int LOW_TEMPERATURE_TRESHOLD = 23;    // значение нижнего температурного порога
+const int DELAY_IN_MS = 500;                // небольшая задержка
+const int BIG_DELAY_IN_MS = 5000;           // большая задержка (для основного цикла)
+const String PHONE_NUMBER = "+79296135951"; // номер телефона, на который будут отправляться смски. Всем привет!            
 
 // символы с последующим сообщением ОК в ответе модуля SIM800L
 const String DELIMITER_BETWEEN_REQUEST_AND_RESPONSE = 
@@ -18,24 +19,23 @@ const String DELIMITER_BETWEEN_REQUEST_AND_RESPONSE =
 
 dht DHT;                                  // класс датчика DHT11
 SoftwareSerial simModule(RX_PIN, TX_PIN); // класс обмена данными с модулем SIM800L
-boolean isSend = false;                   // флаг отправки сообщения (только для режима тестирования)
 boolean isDebug = true;                   // флаг режима отладки (включён вывод в последовательный порт)
 String sendText;                          // отправляемое сообщение
+String mode;                              // режим, в котором сейчас находится устройство
 
 void setup(){
   pinMode(DHT11_PIN, INPUT);
-  pinMode(RELE_PIN, OUTPUT);
+  pinMode(RELAY_PIN, OUTPUT);
 
   Serial.begin(9600);               
   simModule.begin(9600); 
-  digitalWrite(RELE_PIN, HIGH);
+  digitalWrite(RELAY_PIN, HIGH);
 
   delay(DELAY_IN_MS); 
   PrintlnInDebug("Start!");
   ConnectToSimModule();
-  SendRequestAndPrintResponse("AT+CMGF=1");  
-  SendRequestAndPrintResponse("AT+CNMI=1,2,0,0,0");
-  // sms("Hello world", "+79296135951");
+  SendRequest("AT+CMGF=1");  
+  SendRequest("AT+CNMI=1,2,0,0,0");
 }
 
 void loop(){
@@ -47,15 +47,17 @@ void loop(){
 
   PrintDhtParameters(temperature, humidity);  
 
-  digitalWrite(RELE_PIN, IsOnRelay(temperature));  
+  digitalWrite(RELAY_PIN, IsOnRelay(temperature));  
 
   String receivedText = GetReceivedText(); 
   if (receivedText == "")
-    return;
-  else if (receivedText == "Info") {
-    sendText = "Signal=" + GetSignalLevel() + "; temperature=" + String(temperature) + "; humidity=" + String(humidity);
-    SendSms(sendText);
-  }  
+    return;  
+  if (receivedText == "Warm house") 
+    mode = "warm house";
+    
+  sendText = "Mode=" + mode + "; Signal=" + GetSignalLevel() + "; temperature=" + String(temperature) 
+    + "; humidity=" + String(humidity);
+  SendSms(sendText);
   PrintlnInDebug(sendText);  
 }
 
@@ -72,10 +74,17 @@ void SendSms(String text)
   PrintlnInDebug("SMS send finish.");   
 }
 
+// Уровень сигнала, подаваемого на вход реле, исходя из значения температуры и её порогов.
+// Если температура выше (или равна) значения верхнего порога, то подаётся 1 и реле РАЗМЫКАЕТСЯ.
+// Если температура стала ниже (или равна) значения нижнего порога, то подаётся 0 и реде замыкается.
 boolean IsOnRelay(int temperature){
-  if (temperature >= HIGH_TEMPERATURE_TRESHOLD)
-    return true;   
-  if (temperature <= LOW_TEMPERATURE_TRESHOLD)
+  if (temperature >= HIGH_TEMPERATURE_TRESHOLD){
+    mode = "downtime";
+    return true; 
+  }      
+  if (temperature <= LOW_TEMPERATURE_TRESHOLD){
+    mode = "heating";
+  }
     return false;   
 }
 
@@ -91,7 +100,7 @@ void ConnectToSimModule(){
 }
 
 // Отправить запрос к SIM800L и напечатать ответ.
-void SendRequestAndPrintResponse(String request){
+void SendRequest(String request){
   simModule.println(request);
   delay(DELAY_IN_MS);
   PrintResponse();
