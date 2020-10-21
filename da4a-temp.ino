@@ -1,12 +1,13 @@
 #include <dht.h>
 #include <SoftwareSerial.h>
 
-#define DHT11_PIN 4
 #define RX_PIN 2
 #define TX_PIN 3
+#define DHT11_PIN 4
+#define RELE_PIN 5
 
-const int HIGH_ALARM_HUMIDITY_TRESHOLD = 30;
-const int HIGH_ARARM_TEMPERATURE_TRESHOLD = 27;
+const int HIGH_TEMPERATURE_TRESHOLD = 26;
+const int LOW_TEMPERATURE_TRESHOLD = 23;
 const int DELAY_IN_MS = 500;   
 const int BIG_DELAY_IN_MS = 5000;   
 const String PHONE_NUMBER = "+79296135951";            
@@ -23,9 +24,11 @@ String sendText;                          // отправляемое сообщ
 
 void setup(){
   pinMode(DHT11_PIN, INPUT);
+  pinMode(RELE_PIN, OUTPUT);
 
   Serial.begin(9600);               
   simModule.begin(9600); 
+  digitalWrite(RELE_PIN, HIGH);
 
   delay(DELAY_IN_MS); 
   PrintlnInDebug("Start!");
@@ -44,6 +47,8 @@ void loop(){
 
   PrintDhtParameters(temperature, humidity);  
 
+  digitalWrite(RELE_PIN, IsOnRelay(temperature));  
+
   String receivedText = GetReceivedText(); 
   if (receivedText == "")
     return;
@@ -51,7 +56,7 @@ void loop(){
     sendText = "Signal=" + GetSignalLevel() + "; temperature=" + String(temperature) + "; humidity=" + String(humidity);
     SendSms(sendText);
   }  
-  PrintlnInDebug(sendText);
+  PrintlnInDebug(sendText);  
 }
 
 // Отправить сообщение.
@@ -65,6 +70,13 @@ void SendSms(String text)
   simModule.print((char)26);    
   delay(DELAY_IN_MS);    
   PrintlnInDebug("SMS send finish.");   
+}
+
+boolean IsOnRelay(int temperature){
+  if (temperature >= HIGH_TEMPERATURE_TRESHOLD)
+    return true;   
+  if (temperature <= LOW_TEMPERATURE_TRESHOLD)
+    return false;   
 }
 
 // Циклически пытаться соединиться с SIM800L до успеха. 
