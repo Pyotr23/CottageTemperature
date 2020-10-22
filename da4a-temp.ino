@@ -1,27 +1,57 @@
 #include <dht.h>
 #include <SoftwareSerial.h>
 
-const int RX_PIN = 2;     // пины для общения
-const int TX_PIN = 3;     // с модулем SIM800L
+// Пин приёма данных от модуля SIM800L
+const int RX_PIN = 2;     
+// Пин передачи данных модулю SIM800L
+const int TX_PIN = 3;     
 
-const int DHT11_PIN = 4;  // пин датчика температуры и влажности
-const int RELAY_PIN = 5;  // пин реле
+// Пин датчика температуры и влажности
+const int DHT11_PIN = 4;  
+// Пин реле
+const int RELAY_PIN = 5;  
 
-const int HIGH_TEMPERATURE_TRESHOLD = 26;   // значение верхнего температурного порога
-const int LOW_TEMPERATURE_TRESHOLD = 23;    // значение нижнего температурного порога
-const int DELAY_IN_MS = 500;                // небольшая задержка
-const int BIG_DELAY_IN_MS = 5000;           // большая задержка (для основного цикла)
-const String PHONE_NUMBER = "+79296135951"; // номер телефона, на который будут отправляться смски. Всем привет!            
+// Значение верхнего температурного порога
+const int HIGH_TEMPERATURE_TRESHOLD = 26;   
+// Значение нижнего температурного порога
+const int LOW_TEMPERATURE_TRESHOLD = 23;    
+// Небольшая задержка (в мс)
+const int DELAY_IN_MS = 500;                
+// Большая задержка (для основного цикла, в мс)
+const int BIG_DELAY_IN_MS = 5000;           
+// Номер телефона, на который будут отправляться смски. Всем привет!
+const String PHONE_NUMBER = "+79296135951";  
+// Период времени (в часах), в течение которого будет замкнуто реле 
+const int WARM_HOUSE_PERIOD_IN_HOURS = 6;    
+// Количество миллисекунд в часе
+const long MS_IN_HOUR = 3600000;             
 
-// символы с последующим сообщением ОК в ответе модуля SIM800L
+// Название режима "Тёплый дом"
+const String WARM_HOUSE = "warm house";     
+// Название режима "Простой"
+const String DOWNTIME = "downtime";
+// Название режима "Нагрев"
+const String HEATING = "heating";
+
+// Символы с последующим сообщением ОК в ответе модуля SIM800L
 const String DELIMITER_BETWEEN_REQUEST_AND_RESPONSE = 
   String(char(13)) + String(char(13)) + String(char(10)) + String("OK");  
 
-dht DHT;                                  // класс датчика DHT11
-SoftwareSerial simModule(RX_PIN, TX_PIN); // класс обмена данными с модулем SIM800L
-boolean isDebug = true;                   // флаг режима отладки (включён вывод в последовательный порт)
-String sendText;                          // отправляемое сообщение
-String mode;                              // режим, в котором сейчас находится устройство
+// Класс датчика DHT11
+dht DHT;   
+// Класс обмена данными с модулем SIM800L
+SoftwareSerial simModule(RX_PIN, TX_PIN); 
+// Флаг режима отладки (включён вывод в последовательный порт)
+boolean isDebug = true;   
+// Текст отправляемого SMS
+String sendText;   
+// Режим, в котором сейчас находится устройство                       
+String mode;  
+// Счётчик количества итераций основного цикла в режиме "тёплый дом"                            
+int warmHouseCounter = 0;                 
+
+// количество итераций основного цикла в режиме "тёплый дом"
+long warmHouseTickNumber = WARM_HOUSE_PERIOD_IN_HOURS * MS_IN_HOUR / BIG_DELAY_IN_MS;
 
 void setup(){
   pinMode(DHT11_PIN, INPUT);
@@ -40,6 +70,8 @@ void setup(){
 
 void loop(){
   delay(BIG_DELAY_IN_MS);
+  if (mode == WARM_HOUSE)
+    warmHouseCounter++;
 
   int chk = DHT.read11(DHT11_PIN);
   int temperature = (int)DHT.temperature;
@@ -53,8 +85,8 @@ void loop(){
   if (receivedText == "")
     return;  
   if (receivedText == "Warm house") 
-    mode = "warm house";
-    
+    mode = WARM_HOUSE;
+
   sendText = "Mode=" + mode + "; Signal=" + GetSignalLevel() + "; temperature=" + String(temperature) 
     + "; humidity=" + String(humidity);
   SendSms(sendText);
@@ -76,16 +108,26 @@ void SendSms(String text)
 
 // Уровень сигнала, подаваемого на вход реле, исходя из значения температуры и её порогов.
 // Если температура выше (или равна) значения верхнего порога, то подаётся 1 и реле РАЗМЫКАЕТСЯ.
-// Если температура стала ниже (или равна) значения нижнего порога, то подаётся 0 и реде замыкается.
+// Если температура стала ниже (или равна) значения нижнего порога, то подаётся 0 и реле замыкается.
 boolean IsOnRelay(int temperature){
+  if (mode == WARM_HOUSE){
+    if (warmHouseCounter < warmHouseTickNumber)
+      return false;
+    warmHouseCounter = 0;
+    mode = DOWNTIME;
+  } 
+
   if (temperature >= HIGH_TEMPERATURE_TRESHOLD){
-    mode = "downtime";
+    mode = DOWNTIME;
     return true; 
-  }      
+  } 
+
   if (temperature <= LOW_TEMPERATURE_TRESHOLD){
-    mode = "heating";
-  }
+    mode = HEATING; 
     return false;   
+  }
+   
+  return mode == DOWNTIME;
 }
 
 // Циклически пытаться соединиться с SIM800L до успеха. 
@@ -139,7 +181,6 @@ String GetResponse(){
 // Он находится между последним символом №13 и предпоследним символом №10.
 String GetReceivedText()
 {
-  delay(DELAY_IN_MS); 
   if (!simModule.available())
     return "";
   String text = ""; 
