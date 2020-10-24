@@ -22,11 +22,16 @@ const int BIG_DELAY_IN_MS = 5000;
 // Номер телефона, на который будут отправляться смски. Всем привет!
 const String PHONE_NUMBER = "+79296135951";  
 // Период времени (в часах), в течение которого будет замкнуто реле 
-const int WARM_HOUSE_PERIOD_IN_HOURS = 6;    
-// Количество миллисекунд в часе
-const long MS_IN_HOUR = 3600000;             
+const int WARM_HOUSE_PERIOD_IN_HOURS = 3; 
+// const int WARM_HOUSE_PERIOD_IN_HOURS = 6; 
 
-// Название режима "Тёплый дом"
+// Количество миллисекунд в часе
+const long MS_IN_HOUR = 60000; 
+// const long MS_IN_HOUR = 3600000;   
+
+// Название команды для предоставления информации по СМС
+const String INFO_COMMAND = "info"; 
+// Название режима "Тёплый дом" и соответствующей команды
 const String WARM_HOUSE = "warm house";     
 // Название режима "Простой"
 const String DOWNTIME = "downtime";
@@ -46,7 +51,7 @@ boolean isDebug = true;
 // Текст отправляемого SMS
 String sendText;   
 // Режим, в котором сейчас находится устройство                       
-String mode;  
+String mode = HEATING;  
 // Счётчик количества итераций основного цикла в режиме "тёплый дом"                            
 int warmHouseCounter = 0;                 
 
@@ -55,7 +60,7 @@ long warmHouseTickNumber = WARM_HOUSE_PERIOD_IN_HOURS * MS_IN_HOUR / BIG_DELAY_I
 
 void setup(){
   pinMode(DHT11_PIN, INPUT);
-  pinMode(RELAY_PIN, OUTPUT);
+  pinMode(RELAY_PIN, OUTPUT); 
 
   Serial.begin(9600);               
   simModule.begin(9600); 
@@ -73,6 +78,9 @@ void loop(){
   if (mode == WARM_HOUSE)
     warmHouseCounter++;
 
+  PrintInDebug(String(warmHouseTickNumber) + " ");
+  PrintlnInDebug(String(warmHouseCounter));
+
   int chk = DHT.read11(DHT11_PIN);
   int temperature = (int)DHT.temperature;
   int humidity = (int)DHT.humidity; 
@@ -80,15 +88,17 @@ void loop(){
   PrintDhtParameters(temperature, humidity);  
 
   digitalWrite(RELAY_PIN, IsOnRelay(temperature));  
-
-  String receivedText = GetReceivedText(); 
+  
+  String receivedText = GetReceivedText();   
   if (receivedText == "")
-    return;  
-  if (receivedText == "Warm house") 
+    return;   
+  
+  PrintlnInDebug(sendText);
+  
+  if (receivedText == WARM_HOUSE)
     mode = WARM_HOUSE;
-
-  sendText = "Mode=" + mode + "; Signal=" + GetSignalLevel() + "; temperature=" + String(temperature) 
-    + "; humidity=" + String(humidity);
+  sendText = "m=" + mode + "; s=" + GetSignalLevel() + "; t=" + String(temperature) + "; h=" + String(humidity);
+  
   SendSms(sendText);
   PrintlnInDebug(sendText);  
 }
@@ -114,7 +124,7 @@ boolean IsOnRelay(int temperature){
     if (warmHouseCounter < warmHouseTickNumber)
       return false;
     warmHouseCounter = 0;
-    mode = DOWNTIME;
+    mode = HEATING;
   } 
 
   if (temperature >= HIGH_TEMPERATURE_TRESHOLD){
@@ -181,18 +191,26 @@ String GetResponse(){
 // Он находится между последним символом №13 и предпоследним символом №10.
 String GetReceivedText()
 {
+  delay(DELAY_IN_MS);
   if (!simModule.available())
     return "";
+
   String text = ""; 
   while(simModule.available()) 
   {
-    text += char(simModule.read());  
+    text += char(simModule.read());
+  }  
+  text.toLowerCase();
+
+  if (text.indexOf(INFO_COMMAND) != -1) {
+    return INFO_COMMAND;
   }
-  int newLineLastIndex = text.lastIndexOf(String(char(13)));
-  text = text.substring(0, newLineLastIndex);
-  int firstLetterIndex = text.lastIndexOf(String(char(10))) + 1;
-  text = text.substring(firstLetterIndex);                        // для "надёжности" не используется return text.substring()
-  return text;
+
+  if (text.indexOf(WARM_HOUSE) != -1) {
+    return WARM_HOUSE;
+  } 
+
+  return "";
 }
 
 // Очистка последовательного порта от данных.
