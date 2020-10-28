@@ -53,7 +53,11 @@ String sendText;
 // Режим, в котором сейчас находится устройство                       
 String mode = HEATING;  
 // Счётчик количества итераций основного цикла в режиме "тёплый дом"                            
-int warmHouseCounter = 0;                 
+int warmHouseCounter = 0; 
+// Текущее значение температуры в градусах Цельсия
+int temperature = 0;
+// Текущее значение влажности в процентах
+int humidity = 0;
 
 // количество итераций основного цикла в режиме "тёплый дом"
 long warmHouseTickNumber = WARM_HOUSE_PERIOD_IN_HOURS * MS_IN_HOUR / BIG_DELAY_IN_MS;
@@ -73,34 +77,40 @@ void setup(){
   SendRequest("AT+CNMI=1,2,0,0,0");
 }
 
-void loop(){
+void loop(){  
   delay(BIG_DELAY_IN_MS);
   if (mode == WARM_HOUSE)
     warmHouseCounter++;
 
+  PrintlnInDebug(GetSignalLevel());
   PrintInDebug(String(warmHouseTickNumber) + " ");
   PrintlnInDebug(String(warmHouseCounter));
 
   int chk = DHT.read11(DHT11_PIN);
-  int temperature = (int)DHT.temperature;
-  int humidity = (int)DHT.humidity; 
+  temperature = (int)DHT.temperature;
+  humidity = (int)DHT.humidity;
+  PrintDhtParameters();  
 
-  PrintDhtParameters(temperature, humidity);  
-
-  digitalWrite(RELAY_PIN, IsOnRelay(temperature));  
+  digitalWrite(RELAY_PIN, IsOnRelay());  
   
-  String receivedText = GetReceivedText();   
+  String receivedText = GetReceivedText();    
   if (receivedText == "")
     return;   
-  
-  PrintlnInDebug(sendText);
-  
-  if (receivedText == WARM_HOUSE)
+  PrintlnInDebug(receivedText);
+  if (receivedText == INFO_COMMAND)
+    sendText = "m=" + mode + "; " + GetParametersString();
+  else if (receivedText == WARM_HOUSE){
     mode = WARM_HOUSE;
-  sendText = "m=" + mode + "; s=" + GetSignalLevel() + "; t=" + String(temperature) + "; h=" + String(humidity);
-  
+    sendText = "Start warm house; " + GetParametersString();
+  }
+    
   SendSms(sendText);
   PrintlnInDebug(sendText);  
+}
+
+// Получить строку со значениями уровня сигнала, температуры и влажности.
+String GetParametersString(){
+  return "s=" + GetSignalLevel() + "; t=" + String(temperature) + "; h=" + String(humidity);
 }
 
 // Отправить сообщение.
@@ -119,10 +129,11 @@ void SendSms(String text)
 // Уровень сигнала, подаваемого на вход реле, исходя из значения температуры и её порогов.
 // Если температура выше (или равна) значения верхнего порога, то подаётся 1 и реле РАЗМЫКАЕТСЯ.
 // Если температура стала ниже (или равна) значения нижнего порога, то подаётся 0 и реле замыкается.
-boolean IsOnRelay(int temperature){
+boolean IsOnRelay(){
   if (mode == WARM_HOUSE){
     if (warmHouseCounter < warmHouseTickNumber)
       return false;
+    SendSms("Stop warm house; " + GetParametersString());
     warmHouseCounter = 0;
     mode = HEATING;
   } 
@@ -201,8 +212,8 @@ String GetReceivedText()
     text += char(simModule.read());
   }  
   text.toLowerCase();
-
-  if (text.indexOf(INFO_COMMAND) != -1) {
+  PrintlnInDebug(text);
+  if (text.indexOf(INFO_COMMAND) != -1) {    
     return INFO_COMMAND;
   }
 
@@ -236,7 +247,7 @@ void PrintlnInDebug(String text){
 }
 
 // Напечатать значения температуры и влажности.
-void PrintDhtParameters(int temperature, int humidity){
+void PrintDhtParameters(){
   PrintlnInDebug("Temperature = " + String(temperature));
   PrintlnInDebug("Humidity = " + String(humidity));  
 } 
