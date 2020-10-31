@@ -16,7 +16,7 @@ const int HIGH_TEMPERATURE_TRESHOLD = 26;
 // Значение нижнего температурного порога
 const int LOW_TEMPERATURE_TRESHOLD = 23;    
 // Небольшая задержка (в мс)
-const int DELAY_IN_MS = 500;                
+const int DELAY_IN_MS = 1000;                
 // Большая задержка (для основного цикла, в мс)
 const int BIG_DELAY_IN_MS = 5000;           
 // Номер телефона, на который будут отправляться смски. Всем привет!
@@ -32,7 +32,7 @@ const long MS_IN_HOUR = 60000;
 // Название команды для предоставления информации по СМС
 const String INFO_COMMAND = "info"; 
 // Название режима "Тёплый дом" и соответствующей команды
-const String WARM_HOUSE = "warm house";     
+const String WARM_HOUSE = "warmhouse";     
 // Название режима "Простой"
 const String DOWNTIME = "downtime";
 // Название режима "Нагрев"
@@ -59,7 +59,7 @@ int temperature = 0;
 // Текущее значение влажности в процентах
 int humidity = 0;
 
-// количество итераций основного цикла в режиме "тёплый дом"
+// Количество итераций основного цикла в режиме "тёплый дом"
 long warmHouseTickNumber = WARM_HOUSE_PERIOD_IN_HOURS * MS_IN_HOUR / BIG_DELAY_IN_MS;
 
 void setup(){
@@ -72,7 +72,7 @@ void setup(){
 
   delay(DELAY_IN_MS); 
   PrintlnInDebug("Start!");
-  ConnectToSimModule();
+  // ConnectToSimModule();
   SendRequest("AT+CMGF=1");  
   SendRequest("AT+CNMI=1,2,0,0,0");
 }
@@ -82,29 +82,29 @@ void loop(){
   if (mode == WARM_HOUSE)
     warmHouseCounter++;
 
-  PrintlnInDebug(GetSignalLevel());
+  // PrintlnInDebug(GetSignalLevel());
   PrintInDebug(String(warmHouseTickNumber) + " ");
   PrintlnInDebug(String(warmHouseCounter));
 
   int chk = DHT.read11(DHT11_PIN);
   temperature = (int)DHT.temperature;
   humidity = (int)DHT.humidity;
-  PrintDhtParameters();  
-
-  digitalWrite(RELAY_PIN, IsOnRelay());  
+  PrintDhtParameters();      
   
   String receivedText = GetReceivedText();    
   if (receivedText == "")
     return;   
   PrintlnInDebug(receivedText);
-  if (receivedText == INFO_COMMAND)
+  if (receivedText == INFO_COMMAND) {
     sendText = "m=" + mode + "; " + GetParametersString();
+    SendSms(sendText);
+  }    
   else if (receivedText == WARM_HOUSE){
     mode = WARM_HOUSE;
-    sendText = "Start warm house; " + GetParametersString();
-  }
-    
-  SendSms(sendText);
+    sendText = "m=" + mode + "; " + GetParametersString();
+    SendSms(sendText);
+  }  
+  digitalWrite(RELAY_PIN, IsOnRelay());
   PrintlnInDebug(sendText);  
 }
 
@@ -132,10 +132,11 @@ void SendSms(String text)
 boolean IsOnRelay(){
   if (mode == WARM_HOUSE){
     if (warmHouseCounter < warmHouseTickNumber)
-      return false;
-    SendSms("Stop warm house; " + GetParametersString());
+      return false;    
     warmHouseCounter = 0;
     mode = HEATING;
+    sendText = "m=" + mode + "; " + GetParametersString();
+    SendSms(sendText);
   } 
 
   if (temperature >= HIGH_TEMPERATURE_TRESHOLD){
@@ -206,18 +207,21 @@ String GetReceivedText()
   if (!simModule.available())
     return "";
 
-  String text = ""; 
+  String text = "";
   while(simModule.available()) 
   {
     text += char(simModule.read());
-  }  
+  } 
+   
   text.toLowerCase();
   PrintlnInDebug(text);
   if (text.indexOf(INFO_COMMAND) != -1) {    
-    return INFO_COMMAND;
+    text = "";
+    return INFO_COMMAND;    
   }
 
   if (text.indexOf(WARM_HOUSE) != -1) {
+    text = "";
     return WARM_HOUSE;
   } 
 
