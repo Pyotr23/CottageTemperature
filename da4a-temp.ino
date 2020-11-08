@@ -32,7 +32,7 @@ const long MS_IN_HOUR = 60000;
 // Название команды для предоставления информации по СМС
 const String INFO_COMMAND = "info"; 
 // Название режима "Тёплый дом" и соответствующей команды
-const String WARM_HOUSE = "warmhouse";     
+const String WARM_HOUSE = "warm house";     
 // Название режима "Простой"
 const String DOWNTIME = "downtime";
 // Название режима "Нагрев"
@@ -51,7 +51,7 @@ boolean isDebug = true;
 // Текст отправляемого SMS
 String sendText;   
 // Режим, в котором сейчас находится устройство                       
-String mode = HEATING;  
+String workMode = HEATING;  
 // Счётчик количества итераций основного цикла в режиме "тёплый дом"                            
 int warmHouseCounter = 0; 
 // Текущее значение температуры в градусах Цельсия
@@ -66,23 +66,27 @@ void setup(){
   pinMode(DHT11_PIN, INPUT);
   pinMode(RELAY_PIN, OUTPUT); 
 
-  Serial.begin(9600);               
+  if (isDebug)
+    Serial.begin(9600);               
   simModule.begin(9600); 
   digitalWrite(RELAY_PIN, HIGH);
 
   delay(DELAY_IN_MS); 
   PrintlnInDebug("Start!");
-  // ConnectToSimModule();
+  ConnectToSimModule();
   SendRequest("AT+CMGF=1");  
   SendRequest("AT+CNMI=1,2,0,0,0");
 }
 
 void loop(){  
   delay(BIG_DELAY_IN_MS);
-  if (mode == WARM_HOUSE)
+  // ConnectToSimModule();
+  // SendRequest("AT+CMGF=1");
+  if (workMode == WARM_HOUSE)
     warmHouseCounter++;
 
-  // PrintlnInDebug(GetSignalLevel());
+  PrintlnInDebug(workMode);
+  PrintlnInDebug(GetSignalLevel());
   PrintInDebug(String(warmHouseTickNumber) + " ");
   PrintlnInDebug(String(warmHouseCounter));
 
@@ -96,12 +100,12 @@ void loop(){
     return;   
   PrintlnInDebug(receivedText);
   if (receivedText == INFO_COMMAND) {
-    sendText = "m=" + mode + "; " + GetParametersString();
+    sendText = "m=" + workMode + "; " + GetParametersString();
     SendSms(sendText);
   }    
   else if (receivedText == WARM_HOUSE){
-    mode = WARM_HOUSE;
-    sendText = "m=" + mode + "; " + GetParametersString();
+    workMode = WARM_HOUSE;
+    sendText = "m=" + workMode + "; " + GetParametersString();
     SendSms(sendText);
   }  
   digitalWrite(RELAY_PIN, IsOnRelay());
@@ -109,7 +113,7 @@ void loop(){
 }
 
 // Получить строку со значениями уровня сигнала, температуры и влажности.
-String GetParametersString(){
+String GetParametersString() {
   return "s=" + GetSignalLevel() + "; t=" + String(temperature) + "; h=" + String(humidity);
 }
 
@@ -130,26 +134,26 @@ void SendSms(String text)
 // Если температура выше (или равна) значения верхнего порога, то подаётся 1 и реле РАЗМЫКАЕТСЯ.
 // Если температура стала ниже (или равна) значения нижнего порога, то подаётся 0 и реле замыкается.
 boolean IsOnRelay(){
-  if (mode == WARM_HOUSE){
+  if (workMode == WARM_HOUSE){
     if (warmHouseCounter < warmHouseTickNumber)
       return false;    
     warmHouseCounter = 0;
-    mode = HEATING;
-    sendText = "m=" + mode + "; " + GetParametersString();
+    workMode = HEATING;
+    sendText = "m=" + workMode + "; " + GetParametersString();
     SendSms(sendText);
   } 
 
   if (temperature >= HIGH_TEMPERATURE_TRESHOLD){
-    mode = DOWNTIME;
+    workMode = DOWNTIME;
     return true; 
   } 
 
   if (temperature <= LOW_TEMPERATURE_TRESHOLD){
-    mode = HEATING; 
+    workMode = HEATING; 
     return false;   
   }
    
-  return mode == DOWNTIME;
+  return workMode == DOWNTIME;
 }
 
 // Циклически пытаться соединиться с SIM800L до успеха. 
