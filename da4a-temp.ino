@@ -1,10 +1,13 @@
 #include <dht.h>
 #include <SoftwareSerial.h>
 
-// Пин приёма данных от модуля SIM800L
-const int RX_PIN = 2;     
-// Пин передачи данных модулю SIM800L
-const int TX_PIN = 3;     
+// Флаг режима отладки (включён вывод в последовательный порт)
+const boolean IS_DEBUG = true;   
+
+// Пин приёма данных от модуля ESP8266
+const int RX_PIN = 0;     
+// Пин передачи данных модулю ESP8266
+const int TX_PIN = 1;     
 
 // Пин датчика температуры и влажности
 const int DHT11_PIN = 4;  
@@ -14,135 +17,58 @@ const int RELAY_PIN = 5;
 // Значение верхнего температурного порога
 const int HIGH_TEMPERATURE_TRESHOLD = 26;   
 // Значение нижнего температурного порога
-const int LOW_TEMPERATURE_TRESHOLD = 23;    
+const int LOW_TEMPERATURE_TRESHOLD = 23;   
+
 // Небольшая задержка (в мс)
 const int DELAY_IN_MS = 1000;                
 // Большая задержка (для основного цикла, в мс)
 const int BIG_DELAY_IN_MS = 5000;           
-// Номер телефона, на который будут отправляться смски. Всем привет!
-const String PHONE_NUMBER = "+79296135951";  
-// Период времени (в часах), в течение которого будет замкнуто реле 
-const int WARM_HOUSE_PERIOD_IN_HOURS = 3; 
-// const int WARM_HOUSE_PERIOD_IN_HOURS = 6; 
 
-// Количество миллисекунд в часе
-const long MS_IN_HOUR = 60000; 
-// const long MS_IN_HOUR = 3600000;   
-
-// Название команды для предоставления информации по СМС
-const String INFO_COMMAND = "info"; 
-// Название режима "Тёплый дом" и соответствующей команды
-const String WARM_HOUSE = "warm house";     
 // Название режима "Простой"
-const String DOWNTIME = "downtime";
+const char DOWNTIME[] = "downtime";
 // Название режима "Нагрев"
-const String HEATING = "heating";
+const char HEATING[] = "heating";
 
-// Символы с последующим сообщением ОК в ответе модуля SIM800L
-const String DELIMITER_BETWEEN_REQUEST_AND_RESPONSE = 
-  String(char(13)) + String(char(13)) + String(char(10)) + String("OK");  
+// Режим, в котором сейчас находится устройство                       
+String workMode = HEATING;  
 
 // Класс датчика DHT11
 dht DHT;   
-// Класс обмена данными с модулем SIM800L
-SoftwareSerial simModule(RX_PIN, TX_PIN); 
-// Флаг режима отладки (включён вывод в последовательный порт)
-boolean isDebug = true;   
-// Текст отправляемого SMS
-String sendText;   
-// Режим, в котором сейчас находится устройство                       
-String workMode = HEATING;  
-// Счётчик количества итераций основного цикла в режиме "тёплый дом"                            
-int warmHouseCounter = 0; 
-// Текущее значение температуры в градусах Цельсия
+// Класс обмена данными с модулем ESP8266
+SoftwareSerial wifiModule(RX_PIN, TX_PIN); 
+
+// Текущее значение температуры (в градусах Цельсия)
 int temperature = 0;
-// Текущее значение влажности в процентах
+// Текущее значение влажности (в процентах)
 int humidity = 0;
 
-// Количество итераций основного цикла в режиме "тёплый дом"
-long warmHouseTickNumber = WARM_HOUSE_PERIOD_IN_HOURS * MS_IN_HOUR / BIG_DELAY_IN_MS;
-
 void setup(){
+  Serial.begin(9600);
+  // if (IS_DEBUG)
+  //   Serial.begin(9600);               
+  // wifiModule.begin(115200); 
+
+  Serial.println("Preparing...");
+
   pinMode(DHT11_PIN, INPUT);
-  pinMode(RELAY_PIN, OUTPUT); 
+  pinMode(RELAY_PIN, OUTPUT);
 
-  if (isDebug)
-    Serial.begin(9600);               
-  simModule.begin(9600); 
-  digitalWrite(RELAY_PIN, HIGH);
-
-  delay(DELAY_IN_MS); 
-  PrintlnInDebug("Start!");
-  ConnectToSimModule();
-  SendRequest("AT+CMGF=1");  
-  SendRequest("AT+CNMI=1,2,0,0,0");
+  Serial.println("Ready");
 }
 
 void loop(){  
-  delay(BIG_DELAY_IN_MS);
-  // ConnectToSimModule();
-  // SendRequest("AT+CMGF=1");
-  if (workMode == WARM_HOUSE)
-    warmHouseCounter++;
+  // if (wifiModule.available()) 
+  //   Serial.write(wifiModule.read());
 
-  PrintlnInDebug(workMode);
-  PrintlnInDebug(GetSignalLevel());
-  PrintInDebug(String(warmHouseTickNumber) + " ");
-  PrintlnInDebug(String(warmHouseCounter));
-
-  int chk = DHT.read11(DHT11_PIN);
-  temperature = (int)DHT.temperature;
-  humidity = (int)DHT.humidity;
-  PrintDhtParameters();      
-  
-  String receivedText = GetReceivedText();    
-  if (receivedText == "")
-    return;   
-  PrintlnInDebug(receivedText);
-  if (receivedText == INFO_COMMAND) {
-    sendText = "m=" + workMode + "; " + GetParametersString();
-    SendSms(sendText);
-  }    
-  else if (receivedText == WARM_HOUSE){
-    workMode = WARM_HOUSE;
-    sendText = "m=" + workMode + "; " + GetParametersString();
-    SendSms(sendText);
-  }  
-  digitalWrite(RELAY_PIN, IsOnRelay());
-  PrintlnInDebug(sendText);  
+  // if (Serial.available()) 
+  //   wifiModule.write(Serial.read());
 }
 
-// Получить строку со значениями уровня сигнала, температуры и влажности.
-String GetParametersString() {
-  return "s=" + GetSignalLevel() + "; t=" + String(temperature) + "; h=" + String(humidity);
-}
-
-// Отправить сообщение.
-void SendSms(String text) 
-{    
-  PrintlnInDebug("SMS send started");    
-  simModule.println("AT+CMGS=\"" + PHONE_NUMBER + "\"");    
-  delay(DELAY_IN_MS);    
-  simModule.print(text);    
-  delay(DELAY_IN_MS);    
-  simModule.print((char)26);    
-  delay(DELAY_IN_MS);    
-  PrintlnInDebug("SMS send finish.");   
-}
 
 // Уровень сигнала, подаваемого на вход реле, исходя из значения температуры и её порогов.
 // Если температура выше (или равна) значения верхнего порога, то подаётся 1 и реле РАЗМЫКАЕТСЯ.
 // Если температура стала ниже (или равна) значения нижнего порога, то подаётся 0 и реле замыкается.
 boolean IsOnRelay(){
-  if (workMode == WARM_HOUSE){
-    if (warmHouseCounter < warmHouseTickNumber)
-      return false;    
-    warmHouseCounter = 0;
-    workMode = HEATING;
-    sendText = "m=" + workMode + "; " + GetParametersString();
-    SendSms(sendText);
-  } 
-
   if (temperature >= HIGH_TEMPERATURE_TRESHOLD){
     workMode = DOWNTIME;
     return true; 
@@ -156,100 +82,17 @@ boolean IsOnRelay(){
   return workMode == DOWNTIME;
 }
 
-// Циклически пытаться соединиться с SIM800L до успеха. 
-void ConnectToSimModule(){
-  while(!simModule.available()){             
-    simModule.println("AT");
-    PrintlnInDebug("Connecting...");         
-    delay(DELAY_IN_MS);    
-  }
-  PrintlnInDebug("Connected!");           
-  PrintResponse();  
-}
-
-// Отправить запрос к SIM800L и напечатать ответ.
-void SendRequest(String request){
-  simModule.println(request);
-  delay(DELAY_IN_MS);
-  PrintResponse();
-}
-
-// Напечатать ответ от SIM800L в одну строку с двоеточием перед ОК.
-void PrintResponse(){  
-  String response = GetResponse();
-  response.replace(DELIMITER_BETWEEN_REQUEST_AND_RESPONSE, ": OK");
-  PrintInDebug(response);    
-}
-
-// Получить уровень сигнала мобильной связи в формате <XX,X>.
-String GetSignalLevel(){
-  simModule.println("AT+CSQ");
-  delay(DELAY_IN_MS);
-  String response = GetResponse();
-  int signalStartIndex = response.indexOf(':') + 2;
-  response = response.substring(signalStartIndex);
-  int signalEndIndex = response.indexOf(char(13));
-  return response.substring(0, signalEndIndex);
-}
-
-// Прочитать ответ от SIM800L.
-String GetResponse(){
-  String response = "";
-  while(simModule.available()){ 
-    char symbolNumber = simModule.read();
-    if (symbolNumber != 0)           
-      response += char(symbolNumber); 
-  }  
-  return response;
-}
-
-// Получить текст сообщения.
-// Он находится между последним символом №13 и предпоследним символом №10.
-String GetReceivedText()
-{
-  delay(DELAY_IN_MS);
-  if (!simModule.available())
-    return "";
-
-  String text = "";
-  while(simModule.available()) 
-  {
-    text += char(simModule.read());
-  } 
-   
-  text.toLowerCase();
-  PrintlnInDebug(text);
-  if (text.indexOf(INFO_COMMAND) != -1) {    
-    text = "";
-    return INFO_COMMAND;    
-  }
-
-  if (text.indexOf(WARM_HOUSE) != -1) {
-    text = "";
-    return WARM_HOUSE;
-  } 
-
-  return "";
-}
-
-// Очистка последовательного порта от данных.
-void ClearSerialPort(){
-  while (Serial.available()) 
-  {
-    Serial.read(); 
-  }
-}
 
 // Вывести текст в последовательный порт в режиме отладки.
 void PrintInDebug(String text){
-  if (isDebug){
+  if (IS_DEBUG){
     Serial.print(text);
   }
 }
 
 // Вывести текст с новой строкой в последовательный порт в режиме отладки.
 void PrintlnInDebug(String text){
-  if (isDebug){
+  if (IS_DEBUG){
     Serial.println(text);
   }
 }
