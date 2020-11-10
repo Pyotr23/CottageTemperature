@@ -43,25 +43,44 @@ int temperature = 0;
 int humidity = 0;
 
 void setup(){
-  Serial.begin(9600);
-  // if (IS_DEBUG)
-  //   Serial.begin(9600);               
-  // wifiModule.begin(115200); 
-
+  if (IS_DEBUG)
+    Serial.begin(115200);               
+  wifiModule.begin(115200); 
+  delay(DELAY_IN_MS);
   Serial.println("Preparing...");
 
   pinMode(DHT11_PIN, INPUT);
   pinMode(RELAY_PIN, OUTPUT);
 
+  Serial.println("Clear");
+  while (wifiModule.available()) 
+    wifiModule.read();
   Serial.println("Ready");
 }
 
 void loop(){  
-  // if (wifiModule.available()) 
-  //   Serial.write(wifiModule.read());
+  if (Serial.available()){
+    delay(1);
+    int symbolNumber = Serial.read();
+    Serial.print(symbolNumber);
+    Serial.print(" ");    
+    Serial.println((char)symbolNumber);
+    wifiModule.write((char)symbolNumber);
+  }
 
-  // if (Serial.available()) 
-  //   wifiModule.write(Serial.read());
+  if (wifiModule.available()) {
+    delay(1);
+    int wifiNumber = wifiModule.read();
+    Serial.print(wifiNumber);
+    Serial.print(" ");    
+    Serial.println((char)wifiNumber);
+  }
+
+  // if (Serial.available()) {
+  //   int symbolNumber = Serial.read();
+  //   Serial.println();
+  //   wifiModule.write(symbolNumber);
+  // }    
 }
 
 
