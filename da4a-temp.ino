@@ -1,123 +1,189 @@
-#include <dht.h>
-#include <SoftwareSerial.h>
+/*
+ * This demo sketch will fail at the Gmail login unless your Google account has
+ * set the following option:
+ *
+ *     Allow less secure apps: OFF
+ *
+ * which can be found in your Google account under Security. You will get an email
+ * warning from Google that the universe will implode if you allow this.
+ *
+ * see https://www.base64encode.org/ for encoding / decoding
+ */
 
-// Флаг режима отладки (включён вывод в последовательный порт)
-const boolean IS_DEBUG = true;   
+#include <base64.h>
+#include <ESP8266WiFi.h>
+#include "settings.h"
 
-// Пин приёма данных от модуля ESP8266
-const int RX_PIN = 0;     
-// Пин передачи данных модулю ESP8266
-const int TX_PIN = 1;     
+//  const char* _ssid = "UMKA";
+//  const char* _password = "2718281e";
+//  const char* _GMailServer = "smtp.gmail.com";
+  // const char* _mailUser = "2chilavert3@gmail.com";
+  // const char* _mailPassword = "zevod2323";
 
-// Пин датчика температуры и влажности
-const int DHT11_PIN = 4;  
-// Пин реле
-const int RELAY_PIN = 5;  
 
-// Значение верхнего температурного порога
-const int HIGH_TEMPERATURE_TRESHOLD = 26;   
-// Значение нижнего температурного порога
-const int LOW_TEMPERATURE_TRESHOLD = 23;   
+// const char* ssid = _ssid;
+WiFiClientSecure client;
 
-// Небольшая задержка (в мс)
-const int DELAY_IN_MS = 1000;                
-// Большая задержка (для основного цикла, в мс)
-const int BIG_DELAY_IN_MS = 5000;           
 
-// Название режима "Простой"
-const char DOWNTIME[] = "downtime";
-// Название режима "Нагрев"
-const char HEATING[] = "heating";
+void setup() {
+  Serial.begin(115200);
+  delay(10);
 
-// Режим, в котором сейчас находится устройство                       
-String workMode = HEATING;  
+  // Connect to WiFi network
+  Serial.print("Connecting to ");
+  Serial.println(_ssid);
 
-// Класс датчика DHT11
-dht DHT;   
-// Класс обмена данными с модулем ESP8266
-SoftwareSerial wifiModule(RX_PIN, TX_PIN); 
+  WiFi.begin(_ssid, _password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.println("My IP address: ");
+  Serial.println(WiFi.localIP());
 
-// Текущее значение температуры (в градусах Цельсия)
-int temperature = 0;
-// Текущее значение влажности (в процентах)
-int humidity = 0;
-
-void setup(){
-  if (IS_DEBUG)
-    Serial.begin(115200);               
-  wifiModule.begin(115200); 
-  delay(DELAY_IN_MS);
-  Serial.println("Preparing...");
-
-  pinMode(DHT11_PIN, INPUT);
-  pinMode(RELAY_PIN, OUTPUT);
-
-  Serial.println("Clear");
-  while (wifiModule.available()) 
-    wifiModule.read();
-  Serial.println("Ready");
+  delay(1000);
+  sendEmail();
 }
 
-void loop(){  
-  if (Serial.available()){
+void loop() {
+//Nothing to do here. Never send email in a loop. You will get blacklisted.
+}
+
+// Function send a secure email via Gmail
+byte sendEmail()
+{
+  //client.setFingerprint(fingerprint); // not available in axTLS::WiFiClientSecure 4.2.2
+  // port 465=SSL 567=TLS; 587 not available with library 4.2.2
+  // this all needs Google security downgrading:
+  // https://myaccount.google.com/lesssecureapps?utm_source=google-account&utm_medium=web
+  
+ /*
+ * Gmail exposes port 465 for SMTP over SSL and port 587 for SMTP with STARTTLS.
+ * The difference between these two is that SMTP over SSL first establishes a secure 
+ * SSL/TLS connection and conducts SMTP over that connection, and SMTP with STARTTLS 
+ * starts with unencrypted SMTP and then switches to SSL/TLS. 
+ * See https://stackoverflow.com/questions/17281669/using-smtp-gmail-and-starttls
+ */  
+  Serial.println("Attempting to connect to GMAIL server");
+  client.setInsecure();
+  boolean isConnect = client.connect("smtp.gmail.com", 465);
+  Serial.println(isConnect);
+  if (isConnect) {
+    Serial.println(F("Connected"));
+  } else {
+    Serial.print(F("Connection failed:"));
+    return 0;
+  }
+  if (!response())
+    return 0;
+
+  Serial.println(F("Sending Extended Hello"));
+  client.println("EHLO gmail.com");
+  if (!response())
+    return 0;
+
+  // We're not using port 567 in this demo
+  //Serial.println(F("STARTTLS"));
+  //if (!response())
+  //  return 0;
+  //Serial.println(F("Sending EHLO"));
+  //client.println("EHLO gmail.com");
+  //if (!response())
+  //  return 0;
+  
+  Serial.println(F("Sending auth login"));
+  client.println("auth login");
+  if (!response())
+    return 0;
+
+  Serial.println(F("Sending User"));
+  // Change to your base64, ASCII encoded user
+  client.println(base64::encode(_mailUser));
+  if (!response())
+    return 0;
+
+  Serial.println(F("Sending Password"));
+  // change to your base64, ASCII encoded password
+  client.println(base64::encode(_mailPassword));
+  if (!response())
+    return 0;
+
+  Serial.println(F("Sending From"));
+  // your email address (sender) - MUST include angle brackets
+  client.println(F("MAIL FROM: <2chilavert3@gmail.com>"));
+  if (!response())
+    return 0;
+
+  // change to recipient address - MUST include angle brackets
+  Serial.println(F("Sending To"));
+  client.println(F("RCPT To: <2chilavert3@mail.ru>"));
+  // Repeat above line for EACH recipient
+  if (!response())
+    return 0;
+
+  Serial.println(F("Sending DATA"));
+  client.println(F("DATA"));
+  if (!response())
+    return 0;
+
+  Serial.println(F("Sending email"));
+  // recipient address (include option display name if you want)
+  client.println(F("To: Home Alone Group<totally@made.up>"));
+
+  // change to your address
+  client.println(F("From: 2chilavert3@gmail.com"));
+  client.println(F("Subject: Your Arduino\r\n"));
+  client.println(F("This email was sent securely via an encrypted mail link.\n"));
+  client.println(F("In the last hour there was: 8 activities detected. Please check all is well."));
+  client.println(F("This email will NOT be repeated for this hour.\n"));
+  client.println(F("This email was sent from an unmonitored email account - please do not reply."));
+  client.println(F("Love and kisses from Dougle and Benny. They wrote this sketch."));
+
+  // IMPORTANT you must send a complete line containing just a "." to end the conversation
+  // So the PREVIOUS line to this one must be a prinln not just a print
+  client.println(F("."));
+  if (!response())
+    return 0;
+
+  Serial.println(F("Sending QUIT"));
+  client.println(F("QUIT"));
+  if (!response())
+    return 0;
+
+  client.stop();
+  Serial.println(F("Disconnected"));
+  return 1;
+}
+
+// Check response from SMTP server
+byte response()
+{
+  // Wait for a response for up to X seconds
+  int loopCount = 0;
+  while (!client.available()) {
     delay(1);
-    int symbolNumber = Serial.read();
-    Serial.print(symbolNumber);
-    Serial.print(" ");    
-    Serial.println((char)symbolNumber);
-    wifiModule.write((char)symbolNumber);
+    loopCount++;
+    // if nothing received for 10 seconds, timeout
+    if (loopCount > 10000) {
+      client.stop();
+      Serial.println(F("\r\nTimeout"));
+      return 0;
+    }
   }
 
-  if (wifiModule.available()) {
-    delay(1);
-    int wifiNumber = wifiModule.read();
-    Serial.print(wifiNumber);
-    Serial.print(" ");    
-    Serial.println((char)wifiNumber);
+  // Take a snapshot of the response code
+  byte respCode = client.peek();
+  while (client.available())
+  {
+    Serial.write(client.read());
   }
 
-  // if (Serial.available()) {
-  //   int symbolNumber = Serial.read();
-  //   Serial.println();
-  //   wifiModule.write(symbolNumber);
-  // }    
+  if (respCode >= '4')
+  {
+    Serial.print("Failed in eRcv with response: ");
+    Serial.print(respCode);
+    return 0;
+  }
+  return 1;
 }
-
-
-// Уровень сигнала, подаваемого на вход реле, исходя из значения температуры и её порогов.
-// Если температура выше (или равна) значения верхнего порога, то подаётся 1 и реле РАЗМЫКАЕТСЯ.
-// Если температура стала ниже (или равна) значения нижнего порога, то подаётся 0 и реле замыкается.
-boolean IsOnRelay(){
-  if (temperature >= HIGH_TEMPERATURE_TRESHOLD){
-    workMode = DOWNTIME;
-    return true; 
-  } 
-
-  if (temperature <= LOW_TEMPERATURE_TRESHOLD){
-    workMode = HEATING; 
-    return false;   
-  }
-   
-  return workMode == DOWNTIME;
-}
-
-
-// Вывести текст в последовательный порт в режиме отладки.
-void PrintInDebug(String text){
-  if (IS_DEBUG){
-    Serial.print(text);
-  }
-}
-
-// Вывести текст с новой строкой в последовательный порт в режиме отладки.
-void PrintlnInDebug(String text){
-  if (IS_DEBUG){
-    Serial.println(text);
-  }
-}
-
-// Напечатать значения температуры и влажности.
-void PrintDhtParameters(){
-  PrintlnInDebug("Temperature = " + String(temperature));
-  PrintlnInDebug("Humidity = " + String(humidity));  
-} 
