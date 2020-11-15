@@ -2,12 +2,15 @@
 #include <ESP8266WiFi.h>
 #include "settings.h"
 
-// const char* _ssid = "UMKA";
-// const char* _password = "2718281e";
-// const char* _GMailServer = "smtp.gmail.com";
-// const char* _mailUser = "2chilavert3@gmail.com";
-// const char* _mailPassword = "zevod2323";
+// адрес SMTP-сервера
+const char* SMTP_SERVER_ADDRESS = "smtp.gmail.com";
+// порт подключения к SMTP-серверу
+const int SMTP_SERVER_PORT = 465;
 
+// время (в мс) ожидания ответа от сервера, по истечении которого закрывается подключение
+int DELAY_FOR_RESPONSE = 10000;
+
+// переменная, представляющая WiFi-клиент
 WiFiClientSecure wiFiClient;
 
 void setup() {
@@ -15,7 +18,7 @@ void setup() {
   delay(10);
   ConnectToWiFi();
   delay(1000);
-  // SendEmail();
+  SendEmail("Устройство включено");
 }
 
 void loop() {
@@ -50,55 +53,55 @@ byte SendEmail(String text)
     Serial.print(F("Соединение не выполнено"));
     return 0;
   }
-  if (!response())
+  if (!IsReceiveResponse())
     return 0;
 
   Serial.println(F("Отправка команды о начале передачи письма"));
   wiFiClient.println("EHLO gmail.com");
-  if (!response())
+  if (!IsReceiveResponse())
     return 0;
   
   Serial.println(F("Отправка команды о начале авторизации"));
   wiFiClient.println("auth login");
-  if (!response())
+  if (!IsReceiveResponse())
     return 0;
 
   Serial.println(F("Отправка логина"));
-  wiFiClient.println(base64::encode(MAIL_FROM));
-  if (!response())
+  wiFiClient.println(base64::encode(GMAIL_FROM));
+  if (!IsReceiveResponse())
     return 0;
 
   Serial.println(F("Отправка пароля"));
-  wiFiClient.println(base64::encode(MAIL_PASSWORD));
-  if (!response())
+  wiFiClient.println(base64::encode(GMAIL_PASSWORD));
+  if (!IsReceiveResponse())
     return 0;
 
   Serial.println(F("Отправка адреса почты автора письма"));
-  String mailFrom = String("MAIL FROM: <" + MAIL_FROM + ">");
+  String mailFrom = String("MAIL FROM: <" + GMAIL_FROM + ">");
   wiFiClient.println(mailFrom);
-  if (!response())
+  if (!IsReceiveResponse())
     return 0;
 
   Serial.println(F("Sending To"));
   String mailRcptTo = String("RCPT To: <" + MAIL_TO + ">");
   wiFiClient.println(mailRcptTo);  // Повторить для каждого получателя 
-  if (!response())
+  if (!IsReceiveResponse())
     return 0;
 
   Serial.println(F("Отправка команды о начале передачи тела письма"));
   wiFiClient.println(F("DATA"));
-  if (!response())
+  if (!IsReceiveResponse())
     return 0;
 
 
   Serial.println(F("Sending email"));
   // recipient address (include option display name if you want)
   String mailTo = String("To: <" + MAIL_TO + ">");
-  wiFiClient.println(F(mailTo);
+  wiFiClient.println(mailTo);
   // "Home Alone Group" - название группы получателей. Будет отображаться в строке получателей.
   // wiFiClient.println(F("To: Home Alone Group<totally@made.up>")); 
   
-  wiFiClient.println(F(String("From: " + MAIL_FROM));
+  wiFiClient.println(String("From: " + GMAIL_FROM));
   wiFiClient.println(F("Subject: Your Arduino\r\n"));
   wiFiClient.println(text);
   // Каждую новую строку нужно отправлять отдельно.
@@ -109,12 +112,12 @@ byte SendEmail(String text)
 
   // Для окончания отправки необходимо отправить отдельную точку.
   wiFiClient.println(F("."));
-  if (!response())
+  if (!IsReceiveResponse())
     return 0;
 
   Serial.println(F("Завершение отправки"));
   wiFiClient.println(F("QUIT"));
-  if (!response())
+  if (!IsReceiveResponse())
     return 0;
 
   wiFiClient.stop();
@@ -122,32 +125,29 @@ byte SendEmail(String text)
   return 1;
 }
 
-// Check response from SMTP server
-byte response()
+// Получен ли ответ от WiFi-клиента.
+byte IsReceiveResponse()
 {
-  // Wait for a response for up to X seconds
   int loopCount = 0;
   while (!wiFiClient.available()) {
     delay(1);
     loopCount++;
-    // if nothing received for 10 seconds, timeout
-    if (loopCount > 10000) {
+    if (loopCount > DELAY_FOR_RESPONSE) {
       wiFiClient.stop();
       Serial.println(F("\r\nTimeout"));
       return 0;
     }
   }
 
-  // Take a snapshot of the response code
+  // Получение кода ответа.
   byte respCode = wiFiClient.peek();
+
   while (wiFiClient.available())
-  {
     Serial.write(wiFiClient.read());
-  }
 
   if (respCode >= '4')
   {
-    Serial.print("Failed in eRcv with response: ");
+    Serial.print("Failed in eRcv with IsReceiveResponse: ");
     Serial.print(respCode);
     return 0;
   }
