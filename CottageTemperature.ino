@@ -1,28 +1,57 @@
+// #include <dht.h>
 #include <base64.h>
 #include <ESP8266WiFi.h>
 #include "settings.h"
+
+// вывод для управления датчиком влажности и температуры
+const int DHT11_PIN = 5;
+// вывод для управления реле
+const int RELAY_PIN = 6;
 
 // адрес SMTP-сервера
 const char* SMTP_SERVER_ADDRESS = "smtp.gmail.com";
 // порт подключения к SMTP-серверу
 const int SMTP_SERVER_PORT = 465;
-
 // время (в мс) ожидания ответа от сервера, по истечении которого закрывается подключение
-int DELAY_FOR_RESPONSE = 10000;
+const int DELAY_FOR_RESPONSE = 10000;
+// сообщение при включённом реле 
+const char* HEATING = "Идёт нагрев.";
+// сообщение при выключенном реле
+const char* DOWNTIME = "В доме тепло.";
+// продолжительная задержка (в мс, для основного цикла)
+const int BIG_DELAY = 5000;
 
 // переменная, представляющая WiFi-клиент
 WiFiClientSecure wiFiClient;
+// класс датчика влажности и темпуратуры DHT11
+// dht dht11;
+// текущее положение дел
+String currentMode = DOWNTIME;
+// текущее значение температуры
+int temperature;
+// текущее значение влажности
+int humidity;
 
 void setup() {
+  pinMode(DHT11_PIN, INPUT);
+  pinMode(RELAY_PIN, OUTPUT);
+  digitalWrite(RELAY_PIN, HIGH);
   Serial.begin(115200);
   delay(10);
   ConnectToWiFi();
   delay(1000);
-  SendEmail("Устройство включено");
+  // SendEmail("Устройство включено");
 }
 
 void loop() {
-
+  delay(BIG_DELAY);
+  // dht11.read11(DHT11_PIN);
+  // temperature = (int)dht11.temperature;
+  // humidity = (int)dht11.humidity;
+  Serial.print("Температура ");
+  // Serial.print(temperature);
+  Serial.print("; влажность ");
+  // Serial.println(humidity);
 }
 
 // Подключиться к WiFi, используя конфигурацию из файла "settings.h".
