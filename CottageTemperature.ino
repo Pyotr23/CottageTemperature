@@ -1,12 +1,12 @@
-// #include <dht.h>
+#include <DHTesp.h>
 #include <base64.h>
 #include <ESP8266WiFi.h>
 #include "settings.h"
 
-// вывод для управления датчиком влажности и температуры
-const int DHT11_PIN = 5;
 // вывод для управления реле
-const int RELAY_PIN = 6;
+const uint8_t RELAY_PIN = D5;
+// вывод для управления датчиком влажности и температуры
+const uint8_t DHT11_PIN = D6;
 
 // адрес SMTP-сервера
 const char* SMTP_SERVER_ADDRESS = "smtp.gmail.com";
@@ -23,35 +23,29 @@ const int BIG_DELAY = 5000;
 
 // переменная, представляющая WiFi-клиент
 WiFiClientSecure wiFiClient;
-// класс датчика влажности и темпуратуры DHT11
-// dht dht11;
 // текущее положение дел
 String currentMode = DOWNTIME;
 // текущее значение температуры
 int temperature;
 // текущее значение влажности
 int humidity;
+// датчик температуры и влажности DHT
+DHTesp dhtModule;
 
 void setup() {
-  pinMode(DHT11_PIN, INPUT);
-  pinMode(RELAY_PIN, OUTPUT);
-  digitalWrite(RELAY_PIN, HIGH);
   Serial.begin(115200);
-  delay(10);
+  dhtModule.setup(DHT11_PIN, DHTesp::DHT11);
   ConnectToWiFi();
   delay(1000);
-  // SendEmail("Устройство включено");
+  SendEmail("The Box v2.0 включен.");
 }
-
-void loop() {
-  delay(BIG_DELAY);
-  // dht11.read11(DHT11_PIN);
-  // temperature = (int)dht11.temperature;
-  // humidity = (int)dht11.humidity;
-  Serial.print("Температура ");
-  // Serial.print(temperature);
-  Serial.print("; влажность ");
-  // Serial.println(humidity);
+ 
+void loop() {  
+  temperature = (int)dhtModule.getTemperature();
+  Serial.println(temperature);  
+  humidity = (int)dhtModule.getHumidity();
+  Serial.println(humidity);
+  delay(BIG_DELAY);                       
 }
 
 // Подключиться к WiFi, используя конфигурацию из файла "settings.h".
@@ -121,7 +115,6 @@ byte SendEmail(String text)
   wiFiClient.println(F("DATA"));
   if (!IsReceiveResponse())
     return 0;
-
 
   Serial.println(F("Sending email"));
   // recipient address (include option display name if you want)
