@@ -9,9 +9,9 @@ const uint8_t RELAY_PIN = D5;
 const uint8_t DHT11_PIN = D6;
 
 // Значение верхнего температурного порога
-const int HIGH_TEMPERATURE_TRESHOLD = 28;   
+const int HIGH_TEMPERATURE_TRESHOLD = 25;   
 // Значение нижнего температурного порога
-const int LOW_TEMPERATURE_TRESHOLD = 26;    
+const int LOW_TEMPERATURE_TRESHOLD = 20;    
 
 // адрес SMTP-сервера
 const char* SMTP_SERVER_ADDRESS = "smtp.gmail.com";
@@ -21,17 +21,24 @@ const int SMTP_SERVER_PORT = 465;
 const int DELAY_FOR_RESPONSE = 10000;
 
 // сообщение при включённом реле 
-const char* HEATING = "Идёт нагрев.";
+const char* HEATING = "Идёт нагрев";
 // сообщение при выключенном реле
-const char* DOWNTIME = "В доме тепло.";
+const char* DOWNTIME = "В доме тепло";
 
 // продолжительная задержка (в мс, для основного цикла)
-const int BIG_DELAY = 5000;
+const int LONG_DELAY = 5000;
+// небольшая задержка (в мс)
+const int SHORT_DELAY = 1000;
+
+// текст сообщения при включении
+const String WELCOME_MESSAGE = "The Box v2.0 включен.";
 
 // переменная, представляющая WiFi-клиент
 WiFiClientSecure wiFiClient;
 // текущее положение дел
 String currentMode = DOWNTIME;
+// режим перед сравнением
+String oldWorkMode;
 // текущее значение температуры
 int temperature;
 // текущее значение влажности
@@ -43,34 +50,55 @@ void setup() {
   Serial.begin(115200);
   dhtModule.setup(DHT11_PIN, DHTesp::DHT11);
   pinMode(RELAY_PIN, OUTPUT);
-  // ConnectToWiFi();
-  delay(1000);
-  // SendEmail("The Box v2.0 включен.");
+  ConnectToWiFi();
+  delay(SHORT_DELAY);
+  SendEmail(WELCOME_MESSAGE);
 }
  
 void loop() {  
-  temperature = (int)dhtModule.getTemperature();
+  WriteParameters();  
+  digitalWrite(RELAY_PIN, IsOnRelay());
+  PrintData();
+  delay(LONG_DELAY);                       
+}
+
+// Вывести температуру, влажность и сообщение текущего режима.
+void PrintData(){
   Serial.print(temperature);  
   Serial.print(" ");
-  humidity = (int)dhtModule.getHumidity();
   Serial.print(humidity);
   Serial.print(" ");
-  digitalWrite(RELAY_PIN, IsOnRelay());
   Serial.println(currentMode);
-  delay(BIG_DELAY);                       
+}
+
+// Получить информационную строку.
+String GetInfoString(){
+  return currentMode + " (температура = " + String(temperature) + "C, влажность = " + String(humidity) + ")."; 
+}
+
+// Записать текущие значения температуры и влажности.
+void WriteParameters(){
+  temperature = (int)dhtModule.getTemperature();
+  humidity = (int)dhtModule.getHumidity();
 }
 
 // Уровень сигнала, подаваемого на вход реле, исходя из значения температуры и её порогов.
-// Если температура выше (или равна) значения верхнего порога, то подаётся 1 и реле РАЗМЫКАЕТСЯ.
-// Если температура стала ниже (или равна) значения нижнего порога, то подаётся 0 и реле замыкается.
+// Если температура выше (или равна) значения верхнего порога, то подаётся 0 и реле размыкается.
+// Если температура стала ниже (или равна) значения нижнего порога, то подаётся 1 и реле замыкается.
 boolean IsOnRelay(){
   if (temperature >= HIGH_TEMPERATURE_TRESHOLD){
-    currentMode = DOWNTIME;
+    oldWorkMode = currentMode;
+    currentMode = DOWNTIME; 
+    if (oldWorkMode != currentMode)       
+      SendEmail(GetInfoString());  
     return false; 
   } 
 
   if (temperature <= LOW_TEMPERATURE_TRESHOLD){
+    oldWorkMode = currentMode;
     currentMode = HEATING; 
+    if (oldWorkMode != currentMode)       
+      SendEmail(GetInfoString());  
     return true;   
   }
    
@@ -85,7 +113,7 @@ void ConnectToWiFi(){
   WiFi.begin(SSID, SSID_PASSWORD);
 
   while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
+    delay(SHORT_DELAY);
     Serial.print("*");
   }
 
@@ -153,7 +181,7 @@ byte SendEmail(String text)
   // wiFiClient.println(F("To: Home Alone Group<totally@made.up>")); 
   
   wiFiClient.println(String("From: " + GMAIL_FROM));
-  wiFiClient.println(F("Subject: Your Arduino\r\n"));
+  wiFiClient.println(F("Subject: The Box 2.0\r\n"));
   wiFiClient.println(text);
   // Каждую новую строку нужно отправлять отдельно.
   // wiFiClient.println(F("In the last hour there was: 8 activities detected. Please check all is well."));
