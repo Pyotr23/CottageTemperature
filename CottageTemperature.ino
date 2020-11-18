@@ -8,16 +8,23 @@ const uint8_t RELAY_PIN = D5;
 // вывод для управления датчиком влажности и температуры
 const uint8_t DHT11_PIN = D6;
 
+// Значение верхнего температурного порога
+const int HIGH_TEMPERATURE_TRESHOLD = 28;   
+// Значение нижнего температурного порога
+const int LOW_TEMPERATURE_TRESHOLD = 26;    
+
 // адрес SMTP-сервера
 const char* SMTP_SERVER_ADDRESS = "smtp.gmail.com";
 // порт подключения к SMTP-серверу
 const int SMTP_SERVER_PORT = 465;
 // время (в мс) ожидания ответа от сервера, по истечении которого закрывается подключение
 const int DELAY_FOR_RESPONSE = 10000;
+
 // сообщение при включённом реле 
 const char* HEATING = "Идёт нагрев.";
 // сообщение при выключенном реле
 const char* DOWNTIME = "В доме тепло.";
+
 // продолжительная задержка (в мс, для основного цикла)
 const int BIG_DELAY = 5000;
 
@@ -35,17 +42,39 @@ DHTesp dhtModule;
 void setup() {
   Serial.begin(115200);
   dhtModule.setup(DHT11_PIN, DHTesp::DHT11);
-  ConnectToWiFi();
+  pinMode(RELAY_PIN, OUTPUT);
+  // ConnectToWiFi();
   delay(1000);
-  SendEmail("The Box v2.0 включен.");
+  // SendEmail("The Box v2.0 включен.");
 }
  
 void loop() {  
   temperature = (int)dhtModule.getTemperature();
-  Serial.println(temperature);  
+  Serial.print(temperature);  
+  Serial.print(" ");
   humidity = (int)dhtModule.getHumidity();
-  Serial.println(humidity);
+  Serial.print(humidity);
+  Serial.print(" ");
+  digitalWrite(RELAY_PIN, IsOnRelay());
+  Serial.println(currentMode);
   delay(BIG_DELAY);                       
+}
+
+// Уровень сигнала, подаваемого на вход реле, исходя из значения температуры и её порогов.
+// Если температура выше (или равна) значения верхнего порога, то подаётся 1 и реле РАЗМЫКАЕТСЯ.
+// Если температура стала ниже (или равна) значения нижнего порога, то подаётся 0 и реле замыкается.
+boolean IsOnRelay(){
+  if (temperature >= HIGH_TEMPERATURE_TRESHOLD){
+    currentMode = DOWNTIME;
+    return false; 
+  } 
+
+  if (temperature <= LOW_TEMPERATURE_TRESHOLD){
+    currentMode = HEATING; 
+    return true;   
+  }
+   
+  return currentMode == HEATING;
 }
 
 // Подключиться к WiFi, используя конфигурацию из файла "settings.h".
