@@ -8,10 +8,10 @@ const uint8_t RELAY_PIN = D5;
 // вывод для управления датчиком влажности и температуры
 const uint8_t DHT11_PIN = D6;
 
-// Значение верхнего температурного порога
-const int HIGH_TEMPERATURE_TRESHOLD = 25;   
 // Значение нижнего температурного порога
-const int LOW_TEMPERATURE_TRESHOLD = 20;    
+const int LOW_TEMPERATURE_TRESHOLD = 12;  
+// Значение верхнего температурного порога
+const int HIGH_TEMPERATURE_TRESHOLD = 17;     
 
 // адрес SMTP-сервера
 const char* SMTP_SERVER_ADDRESS = "smtp.gmail.com";
@@ -21,20 +21,34 @@ const int SMTP_SERVER_PORT = 465;
 const int DELAY_FOR_RESPONSE = 10000;
 
 // сообщение при включённом реле 
-const char* HEATING = "Идёт нагрев";
+const char* HEATING = "Включились нагреватели";
 // сообщение при выключенном реле
-const char* DOWNTIME = "В доме тепло";
+const char* DOWNTIME = "В доме стало тепло";
+// сообщение, что долго идёт нагрев
+const char* HEATING_CONTINUES = "Продолжается нагрев";
+// сообщение, что в доме хорошо
+const char* GOOD_CLIMATE = "Тёплый дом ждёт";
 
 // продолжительная задержка (в мс, для основного цикла)
-const int LONG_DELAY = 5000;
+const int LONG_DELAY = 30000;
 // небольшая задержка (в мс)
 const int SHORT_DELAY = 1000;
 
 // текст сообщения при включении
 const String WELCOME_MESSAGE = "The Box v2.0 включен.";
 
+// период времени (в часах), по истечении которого будет отправлено сообщение с текущими параметрами,
+// если режим устройства не менялся 
+const int PERIOD_WITHOUT_CHANGES_IN_HOURS = 6; 
+// количество миллисекунд в часе
+const long MS_IN_HOUR = 3600000;
+// количество итераций основного цикла без изменений режима до отправки письма 
+const long pauseTickNumber = PERIOD_WITHOUT_CHANGES_IN_HOURS * MS_IN_HOUR / LONG_DELAY;
+
 // переменная, представляющая WiFi-клиент
 WiFiClientSecure wiFiClient;
+// значение счётчика, который считает итерации до отправки письма
+long counter;
 // текущее положение дел
 String currentMode = DOWNTIME;
 // режим перед сравнением
@@ -59,11 +73,24 @@ void loop() {
   WriteParameters();  
   digitalWrite(RELAY_PIN, IsOnRelay());
   PrintData();
-  delay(LONG_DELAY);                       
+
+  delay(LONG_DELAY); 
+
+  counter++;
+  if (counter >= pauseTickNumber){
+    if (currentMode == DOWNTIME)
+      SendEmail(GetMessageText(GOOD_CLIMATE));
+    else 
+      SendEmail(GetMessageText(HEATING_CONTINUES));    
+  }                      
 }
 
 // Вывести температуру, влажность и сообщение текущего режима.
 void PrintData(){
+  Serial.print(counter);
+  Serial.print(" ");
+  Serial.print(pauseTickNumber);
+  Serial.print(" ");
   Serial.print(temperature);  
   Serial.print(" ");
   Serial.print(humidity);
@@ -72,8 +99,8 @@ void PrintData(){
 }
 
 // Получить информационную строку.
-String GetInfoString(){
-  return currentMode + " (температура = " + String(temperature) + "C, влажность = " + String(humidity) + ")."; 
+String GetMessageText(String initialPart){
+  return initialPart + " (температура = " + String(temperature) + "C, влажность = " + String(humidity) + ")."; 
 }
 
 // Записать текущие значения температуры и влажности.
@@ -90,7 +117,7 @@ boolean IsOnRelay(){
     oldWorkMode = currentMode;
     currentMode = DOWNTIME; 
     if (oldWorkMode != currentMode)       
-      SendEmail(GetInfoString());  
+      SendEmail(GetMessageText(currentMode));  
     return false; 
   } 
 
@@ -98,7 +125,7 @@ boolean IsOnRelay(){
     oldWorkMode = currentMode;
     currentMode = HEATING; 
     if (oldWorkMode != currentMode)       
-      SendEmail(GetInfoString());  
+      SendEmail(GetMessageText(currentMode));  
     return true;   
   }
    
@@ -125,6 +152,12 @@ void ConnectToWiFi(){
 // Отправить письмо
 byte SendEmail(String text)
 {
+  counter = 0;
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(SHORT_DELAY);
+    Serial.print("*");
+  }
+
   Serial.println("Попытка подключения к SMTP-серверу");
   wiFiClient.setInsecure();
   if (wiFiClient.connect(SMTP_SERVER_ADDRESS, SMTP_SERVER_PORT)) 
