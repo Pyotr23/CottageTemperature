@@ -9,9 +9,9 @@ const uint8_t RELAY_PIN = D5;
 const uint8_t DHT11_PIN = D6;
 
 // Значение нижнего температурного порога
-const int LOW_TEMPERATURE_TRESHOLD = 12;  
+const int LOW_TEMPERATURE_TRESHOLD = 7;  
 // Значение верхнего температурного порога
-const int HIGH_TEMPERATURE_TRESHOLD = 17;     
+const int HIGH_TEMPERATURE_TRESHOLD = 12;     
 
 // адрес SMTP-сервера
 const char* SMTP_SERVER_ADDRESS = "smtp.gmail.com";
@@ -35,7 +35,7 @@ const int LONG_DELAY = 30000;
 const int SHORT_DELAY = 1000;
 
 // текст сообщения при включении
-const String WELCOME_MESSAGE = "The Box v2.0 включен.";
+const String WELCOME_MESSAGE = "The Box v2.0 включен";
 
 // период времени (в часах), по истечении которого будет отправлено сообщение с текущими параметрами,
 // если режим устройства не менялся 
@@ -66,7 +66,8 @@ void setup() {
   pinMode(RELAY_PIN, OUTPUT);
   ConnectToWiFi();
   delay(SHORT_DELAY);
-  SendEmail(WELCOME_MESSAGE);
+  WriteParameters(); 
+  SendEmail(GetMessageText(WELCOME_MESSAGE));
 }
  
 void loop() {  
@@ -196,8 +197,10 @@ byte SendEmail(String text)
     return 0;
 
   Serial.println(F("Sending To"));
-  String mailRcptTo = String("RCPT To: <" + MAIL_TO + ">");
-  wiFiClient.println(mailRcptTo);  // Повторить для каждого получателя 
+  String mailRcptToFirst = String("RCPT To: <" + MAIL_TO_FIRST + ">");
+  wiFiClient.println(mailRcptToFirst);  // Повторить для каждого получателя 
+  String mailRcptToSecond = String("RCPT To: <" + MAIL_TO_SECOND + ">");
+  wiFiClient.println(mailRcptToSecond);
   if (!IsReceiveResponse())
     return 0;
 
@@ -208,7 +211,7 @@ byte SendEmail(String text)
 
   Serial.println(F("Sending email"));
   // recipient address (include option display name if you want)
-  String mailTo = String("To: <" + MAIL_TO + ">");
+  String mailTo = String("To: <" + MAIL_TO_FIRST + ">, <" + MAIL_TO_SECOND + ">");
   wiFiClient.println(mailTo);
   // "Home Alone Group" - название группы получателей. Будет отображаться в строке получателей.
   // wiFiClient.println(F("To: Home Alone Group<totally@made.up>")); 
