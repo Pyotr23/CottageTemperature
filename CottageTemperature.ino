@@ -3,6 +3,14 @@
 #include <ESP8266WiFi.h>
 #include "settings.h"
 
+// // Для работоспособности программы необходимо определить со своими значениями следующие параметры:
+// const char* SSID = "НАЗВАНИЕ_WIFI_ТОЧКИ";
+// const char* SSID_PASSWORD = "ПАРОЛЬ_ОТ_WIFI";
+// const String GMAIL_FROM = "GMAIL_АДРЕС_С_КОТОРОГО_БУДУТ_ОТПРАВЛЯТЬСЯ_СООБЩЕНИЯ";
+// const char* GMAIL_PASSWORD = "ПАРОЛЬ_ОТ_ЭТОЙ_ПОЧТЫ";
+// const String MAIL_TO_FIRST = "ПЕРВЫЙ_АДРЕС_ПОЧТЫ_ДЛЯ_ПОЛУЧЕНИЯ_УВЕДОМЛЕНИЙ";
+// const String MAIL_TO_SECOND = "ВТОРОЙ_АДРЕС_ПОЧТЫ_ДЛЯ_ПОЛУЧЕНИЯ_УВЕДОМЛЕНИЙ";
+
 // вывод для управления реле
 const uint8_t RELAY_PIN = D5;
 // вывод для управления датчиком влажности и температуры
@@ -11,7 +19,9 @@ const uint8_t DHT11_PIN = D6;
 // Значение нижнего температурного порога
 const int LOW_TEMPERATURE_TRESHOLD = 5;  
 // Значение верхнего температурного порога
-const int HIGH_TEMPERATURE_TRESHOLD = 9;     
+const int HIGH_TEMPERATURE_TRESHOLD = 9;
+// Версия устройства
+const String VERSION = "3.0";     
 
 // адрес SMTP-сервера
 const char* SMTP_SERVER_ADDRESS = "smtp.gmail.com";
@@ -35,7 +45,7 @@ const int LONG_DELAY = 30000;
 const int SHORT_DELAY = 1000;
 
 // текст сообщения при включении
-const String WELCOME_MESSAGE = "The Box v3.0 включен";
+const String WELCOME_MESSAGE = "The Box " + VERSION + " включен";
 
 // период времени (в часах), по истечении которого будет отправлено сообщение с текущими параметрами,
 // если режим устройства не менялся 
@@ -64,7 +74,7 @@ void setup() {
   Serial.begin(115200);
   dhtModule.setup(DHT11_PIN, DHTesp::DHT11);
   pinMode(RELAY_PIN, OUTPUT);
-  digitalWrite(RELAY_PIN, HIGH);
+  digitalWrite(RELAY_PIN, HIGH);  // при использовании реле KY-019 необходимо разомкнуть его при старте
   ConnectToWiFi();
   delay(SHORT_DELAY);
   WriteParameters(); 
@@ -119,8 +129,8 @@ void WriteParameters(){
 }
 
 // Уровень сигнала, подаваемого на вход реле, исходя из значения температуры и её порогов.
-// Если температура выше (или равна) значения верхнего порога, то подаётся 0 и реле размыкается.
-// Если температура стала ниже (или равна) значения нижнего порога, то подаётся 1 и реле замыкается.
+// Если температура выше (или равна) значения верхнего порога, то подаётся 1 и KY-019 размыкается.
+// Если температура стала ниже (или равна) значения нижнего порога, то подаётся 0 и KY-019 замыкается.
 boolean IsOnRelay(){
   if (temperature >= HIGH_TEMPERATURE_TRESHOLD){
     oldWorkMode = currentMode;
@@ -225,7 +235,8 @@ byte SendEmail(String text)
   // wiFiClient.println(F("To: Home Alone Group<totally@made.up>")); 
   
   wiFiClient.println(String("From: " + GMAIL_FROM));
-  wiFiClient.println(F("Subject: The Box 2.0\r\n"));
+  String subject = "Subject: The Box " + VERSION + "\r\n";
+  wiFiClient.println(subject);
   wiFiClient.println(text);
   // Каждую новую строку нужно отправлять отдельно.
   // wiFiClient.println(F("In the last hour there was: 8 activities detected. Please check all is well."));
