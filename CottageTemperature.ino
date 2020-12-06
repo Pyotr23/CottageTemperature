@@ -9,9 +9,9 @@ const uint8_t RELAY_PIN = D5;
 const uint8_t DHT11_PIN = D6;
 
 // Значение нижнего температурного порога
-const int LOW_TEMPERATURE_TRESHOLD = 7;  
+const int LOW_TEMPERATURE_TRESHOLD = 5;  
 // Значение верхнего температурного порога
-const int HIGH_TEMPERATURE_TRESHOLD = 12;     
+const int HIGH_TEMPERATURE_TRESHOLD = 9;     
 
 // адрес SMTP-сервера
 const char* SMTP_SERVER_ADDRESS = "smtp.gmail.com";
@@ -35,7 +35,7 @@ const int LONG_DELAY = 30000;
 const int SHORT_DELAY = 1000;
 
 // текст сообщения при включении
-const String WELCOME_MESSAGE = "The Box v2.0 включен";
+const String WELCOME_MESSAGE = "The Box v3.0 включен";
 
 // период времени (в часах), по истечении которого будет отправлено сообщение с текущими параметрами,
 // если режим устройства не менялся 
@@ -64,10 +64,11 @@ void setup() {
   Serial.begin(115200);
   dhtModule.setup(DHT11_PIN, DHTesp::DHT11);
   pinMode(RELAY_PIN, OUTPUT);
+  digitalWrite(RELAY_PIN, HIGH);
   ConnectToWiFi();
   delay(SHORT_DELAY);
   WriteParameters(); 
-  SendEmail(GetMessageText(WELCOME_MESSAGE));
+  SendEmail(GetInitialMessageText());
 }
  
 void loop() {  
@@ -104,6 +105,13 @@ String GetMessageText(String initialPart){
   return initialPart + " (температура = " + String(temperature) + "C, влажность = " + String(humidity) + ")."; 
 }
 
+// Получить информационную строку при включении.
+String GetInitialMessageText(){
+  return WELCOME_MESSAGE + " (диапазон поддерживаемой температуры = [" + LOW_TEMPERATURE_TRESHOLD
+    + "..." + HIGH_TEMPERATURE_TRESHOLD + "], температура = " + String(temperature) 
+    + "C, влажность = " + String(humidity) + "%)."; 
+}
+
 // Записать текущие значения температуры и влажности.
 void WriteParameters(){
   temperature = (int)dhtModule.getTemperature();
@@ -119,7 +127,7 @@ boolean IsOnRelay(){
     currentMode = DOWNTIME; 
     if (oldWorkMode != currentMode)       
       SendEmail(GetMessageText(currentMode));  
-    return false; 
+    return true; 
   } 
 
   if (temperature <= LOW_TEMPERATURE_TRESHOLD){
@@ -127,10 +135,10 @@ boolean IsOnRelay(){
     currentMode = HEATING; 
     if (oldWorkMode != currentMode)       
       SendEmail(GetMessageText(currentMode));  
-    return true;   
+    return false;   
   }
    
-  return currentMode == HEATING;
+  return currentMode != HEATING;
 }
 
 // Подключиться к WiFi, используя конфигурацию из файла "settings.h".
