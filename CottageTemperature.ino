@@ -21,7 +21,7 @@ const int LOW_TEMPERATURE_TRESHOLD = 5;
 // Значение верхнего температурного порога
 const int HIGH_TEMPERATURE_TRESHOLD = 9;
 // Версия устройства
-const String VERSION = "3.0";     
+const String VERSION = "3.1";     
 
 // адрес SMTP-сервера
 const char* SMTP_SERVER_ADDRESS = "smtp.gmail.com";
@@ -40,7 +40,7 @@ const char* HEATING_CONTINUES = "Продолжается нагрев";
 const char* GOOD_CLIMATE = "Тёплый дом ждёт";
 
 // продолжительная задержка (в мс, для основного цикла)
-const int LONG_DELAY = 30000;
+const int LONG_DELAY = 60000;
 // небольшая задержка (в мс)
 const int SHORT_DELAY = 1000;
 
@@ -49,11 +49,16 @@ const String WELCOME_MESSAGE = "The Box " + VERSION + " включен";
 
 // период времени (в часах), по истечении которого будет отправлено сообщение с текущими параметрами,
 // если режим устройства не менялся 
-const int PERIOD_WITHOUT_CHANGES_IN_HOURS = 6; 
+const int PERIOD_WITHOUT_CHANGES_IN_HOURS = 2; 
 // количество миллисекунд в часе
 const long MS_IN_HOUR = 3600000;
+
 // количество итераций основного цикла без изменений режима до отправки письма 
-const long pauseTickNumber = PERIOD_WITHOUT_CHANGES_IN_HOURS * MS_IN_HOUR / LONG_DELAY;
+const long PAUSE_TICK_NUMBER = PERIOD_WITHOUT_CHANGES_IN_HOURS * MS_IN_HOUR / LONG_DELAY;
+// количество секунд для подключения к WiFi (в мс)
+const int TIME_FOR_WIFI_CONNECTION = 15000;
+// количество итераций для подключения к WiFi
+const int WIFI_CONNECTION_TICK_NUMBER = TIME_FOR_WIFI_CONNECTION / SHORT_DELAY;
 
 // переменная, представляющая WiFi-клиент
 WiFiClientSecure wiFiClient;
@@ -69,14 +74,14 @@ int temperature;
 int humidity;
 // датчик температуры и влажности DHT
 DHTesp dhtModule;
+// флаг успешной отправки письма
+bool wasSendEmail = true;
 
 void setup() {
   Serial.begin(115200);
   dhtModule.setup(DHT11_PIN, DHTesp::DHT11);
   pinMode(RELAY_PIN, OUTPUT);
-  digitalWrite(RELAY_PIN, HIGH);  // при использовании реле KY-019 необходимо разомкнуть его при старте
-  ConnectToWiFi();
-  delay(SHORT_DELAY);
+  digitalWrite(RELAY_PIN, HIGH);  // при использовании реле KY-019 необходимо разомкнуть его при старте  
   WriteParameters(); 
   SendEmail(GetInitialMessageText());
 }
@@ -89,7 +94,7 @@ void loop() {
   delay(LONG_DELAY); 
 
   counter++;
-  if (counter >= pauseTickNumber){
+  if (counter >= PAUSE_TICK_NUMBER || !wasSendEmail){
     if (currentMode == DOWNTIME)
       SendEmail(GetMessageText(GOOD_CLIMATE));
     else 
@@ -101,7 +106,7 @@ void loop() {
 void PrintData(){
   Serial.print(counter);
   Serial.print(" ");
-  Serial.print(pauseTickNumber);
+  Serial.print(PAUSE_TICK_NUMBER);
   Serial.print(" ");
   Serial.print(temperature);  
   Serial.print(" ");
@@ -151,31 +156,38 @@ boolean IsOnRelay(){
   return currentMode != HEATING;
 }
 
-// Подключиться к WiFi, используя конфигурацию из файла "settings.h".
-void ConnectToWiFi(){
+// Удалось ли подключиться к WiFi, используя конфигурацию из файла "settings.h".
+bool IsConnectToWiFi(){
   Serial.print("Попытка подключения к сети ");
   Serial.println(SSID);
 
   WiFi.begin(SSID, SSID_PASSWORD);
-
-  while (WiFi.status() != WL_CONNECTED) {
+  
+  for (int i = 0; i < WIFI_CONNECTION_TICK_NUMBER; i++){
     delay(SHORT_DELAY);
     Serial.print("*");
+    if (WiFi.status() == WL_CONNECTED)
+      break;
   }
+
+  if (WiFi.status() != WL_CONNECTED)
+    return false;
 
   Serial.println();
   Serial.print("IP-адрес модуля: ");
   Serial.println(WiFi.localIP());
+  return true;
 }
 
 // Отправить письмо
-byte SendEmail(String text)
+void SendEmail(String text)
 {
-  counter = 0;
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(SHORT_DELAY);
-    Serial.print("*");
-  }
+  if (!IsConnectToWiFi()){
+    wasSendEmail = false;
+    return;
+  }    
+
+  counter = 0;  
 
   Serial.println("Попытка подключения к SMTP-серверу");
   wiFiClient.setInsecure();
@@ -183,49 +195,66 @@ byte SendEmail(String text)
     Serial.println(F("Подключено!"));
   else {
     Serial.print(F("Соединение не выполнено"));
-    return 0;
+    wasSendEmail = false;
+    return;
   }
-  if (!IsReceiveResponse())
-    return 0;
+  if (!IsReceiveResponse()){
+    wasSendEmail = false;
+    return;
+  }
 
   Serial.println(F("Отправка команды о начале передачи письма"));
   wiFiClient.println("EHLO gmail.com");
-  if (!IsReceiveResponse())
-    return 0;
+  if (!IsReceiveResponse()){
+    wasSendEmail = false;
+    return;
+  }
   
   Serial.println(F("Отправка команды о начале авторизации"));
   wiFiClient.println("auth login");
-  if (!IsReceiveResponse())
-    return 0;
+  if (!IsReceiveResponse()){
+    wasSendEmail = false;
+    return;
+  }
 
   Serial.println(F("Отправка логина"));
   wiFiClient.println(base64::encode(GMAIL_FROM));
-  if (!IsReceiveResponse())
-    return 0;
+  if (!IsReceiveResponse()){
+    wasSendEmail = false;
+    return;
+  }
 
   Serial.println(F("Отправка пароля"));
   wiFiClient.println(base64::encode(GMAIL_PASSWORD));
-  if (!IsReceiveResponse())
-    return 0;
-
+  if (!IsReceiveResponse()){
+    wasSendEmail = false;
+    return;
+  }
+    
   Serial.println(F("Отправка адреса почты автора письма"));
   String mailFrom = String("MAIL FROM: <" + GMAIL_FROM + ">");
   wiFiClient.println(mailFrom);
-  if (!IsReceiveResponse())
-    return 0;
+  if (!IsReceiveResponse()){
+    wasSendEmail = false;
+    return;
+  }
 
   Serial.println(F("Sending To"));
   String mailRcptToFirst = String("RCPT To: <" + MAIL_TO_FIRST + ">");
   wiFiClient.println(mailRcptToFirst);  // Повторить для каждого получателя 
   String mailRcptToSecond = String("RCPT To: <" + MAIL_TO_SECOND + ">");
   wiFiClient.println(mailRcptToSecond);
-  if (!IsReceiveResponse())
-    return 0;
+  if (!IsReceiveResponse()){
+    wasSendEmail = false;
+    return;
+  }    
 
   Serial.println(F("Отправка команды о начале передачи тела письма"));
   wiFiClient.println(F("DATA"));
-  if (!IsReceiveResponse())
-    return 0;
+  if (!IsReceiveResponse()){
+    wasSendEmail = false;
+    return;
+  }
 
   Serial.println(F("Sending email"));
   // recipient address (include option display name if you want)
@@ -246,17 +275,22 @@ byte SendEmail(String text)
 
   // Для окончания отправки необходимо отправить отдельную точку.
   wiFiClient.println(F("."));
-  if (!IsReceiveResponse())
-    return 0;
+  if (!IsReceiveResponse()){
+    wasSendEmail = false;
+    return;
+  }
 
   Serial.println(F("Завершение отправки"));
   wiFiClient.println(F("QUIT"));
-  if (!IsReceiveResponse())
-    return 0;
+  if (!IsReceiveResponse()){
+    wasSendEmail = false;
+    return;
+  }
 
   wiFiClient.stop();
-  Serial.println(F("Соединение с SMTP-сервером разорвано"));
-  return 1;
+  Serial.println(F("Соединение с SMTP-сервером разорвано")); 
+
+  wasSendEmail = true;
 }
 
 // Получен ли ответ от WiFi-клиента.
