@@ -2,11 +2,13 @@
 
 // Вывод для управления датчиком влажности и температуры.
 const uint8_t DHT11_PIN = 2;
+const uint8_t RELE1_PIN = 3;
+const uint8_t RELE2_PIN = 4;
 
 // Значение нижнего температурного порога.
-const int LOW_TEMPERATURE_TRESHOLD = 10;  
+int lowTemperatureTreshold = 23;  
 // Значение верхнего температурного порога.
-const int HIGH_TEMPERATURE_TRESHOLD = 30;
+ int highTemperatureTreshold = 24;
 // Версия устройства.
 const String VERSION = "4.0"; 
 
@@ -28,11 +30,33 @@ bool wasHeating = false;
 void setup()
 {
     Serial.begin(9600);  
+    pinMode(RELE1_PIN, OUTPUT);
+    pinMode(RELE2_PIN, OUTPUT);
     dhtModule.setup(DHT11_PIN, DHTesp::DHT11);  
+    digitalWrite(RELE1_PIN, HIGH);
+    digitalWrite(RELE2_PIN, HIGH);
 }
  
 void loop() {
     delay(3000);
+
+    Serial.print(lowTemperatureTreshold);
+    Serial.print("---");
+    Serial.print(highTemperatureTreshold);
+    Serial.print("---");
+    Serial.print(isContiniousHeating);
+    Serial.print("---");
+    Serial.print(temperature);
+    Serial.print("---");
+    Serial.print(humidity);
+    Serial.print("---");
+    Serial.print(isHeating);
+    Serial.print("---");
+    Serial.println(IsOnRelay());
+
+    WriteParameters();
+    digitalWrite(RELE1_PIN, IsOnRelay());
+    digitalWrite(RELE2_PIN, IsOnRelay());
 
     if (Serial.available() > 0){
         String command = GetSerialPortText();    
@@ -44,27 +68,19 @@ void loop() {
  
         if (command.startsWith("/min")){
             index = command.indexOf(':');
-            LOW_TEMPERATURE_TRESHOLD = command.substring(index + 1).toInt();            
+            lowTemperatureTreshold = command.substring(index + 1).toInt();            
         }            
         else if (command.startsWith("/max")){
             index = command.indexOf(':');
-            HIGH_TEMPERATURE_TRESHOLD = command.substring(index + 1).toInt();
+            highTemperatureTreshold = command.substring(index + 1).toInt();
         }
         else if (command.startsWith("/heat")){
             index = command.indexOf(':');
             isContiniousHeating = command.substring(index + 1).toInt();
         }
         else if (command.startsWith("/info")){
-            HIGH_TEMPERATURE_TRESHOLD = 23;
+            highTemperatureTreshold = 23;
         }
-
-        WriteParameters();
-
-        Serial.println(LOW_TEMPERATURE_TRESHOLD);
-        Serial.println(HIGH_TEMPERATURE_TRESHOLD);
-        Serial.println(isContiniousHeating);
-        Serial.println(temperature);
-        Serial.println(humidity);
 
         command = "";
     } 
@@ -96,20 +112,27 @@ boolean IsOnRelay(){
         return false;
     }
 
-
-    if (temperature >= HIGH_TEMPERATURE_TRESHOLD){
+    if (temperature >= highTemperatureTreshold){
     wasHeating = isHeating;
     isHeating = false; 
-    // if (wasHeating != isHeating)    // сообщение, что прекратился нагрев       
+    if (wasHeating != isHeating){   // сообщение, что прекратился нагрев 
+        Serial.println("Прекратился нагрев");
+        // digitalWrite(RELE1_PIN, HIGH);
+        // digitalWrite(RELE2_PIN, HIGH);
+    }         
     //   SendEmail(GetMessageText(currentMode));  
     return true; 
     } 
 
-    if (temperature <= LOW_TEMPERATURE_TRESHOLD){
+    if (temperature <= lowTemperatureTreshold){
     wasHeating = isHeating;
     isHeating = true; 
-    // if (wasHeating != isHeating)       
-    //   SendEmail(GetMessageText(currentMode));   // сообщение, что начался нагрев  
+    if (wasHeating != isHeating) {  // сообщение, что начался нагрев  
+        Serial.println("Пошёл нагрев");
+        // digitalWrite(RELE1_PIN, LOW);
+        // digitalWrite(RELE2_PIN, LOW);
+    }      
+    //   SendEmail(GetMessageText(currentMode));   
     return false;   
     }
 
