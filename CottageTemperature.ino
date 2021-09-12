@@ -5,12 +5,20 @@ const uint8_t DHT11_PIN = 2;
 const uint8_t RELE1_PIN = 3;
 const uint8_t RELE2_PIN = 4;
 
+// Версия устройства.
+const char VERSION[] = "4.0"; 
+
+// Пауза в каждой итерации основного цикла, в мс.
+double loopDelay = 10000;
+// Периодичность уведомлений, в мс.
+double notificationDelay = 60000;
+int notificationCountValue = ceil(notificationDelay / loopDelay);
+int notificationCounter = 0;
+
 // Значение нижнего температурного порога.
 int lowTemperatureTreshold = 23;  
 // Значение верхнего температурного порога.
- int highTemperatureTreshold = 24;
-// Версия устройства.
-const String VERSION = "4.0"; 
+int highTemperatureTreshold = 24;
 
 // Датчик температуры и влажности DHT.
 DHTesp dhtModule;
@@ -37,22 +45,26 @@ void setup()
     digitalWrite(RELE2_PIN, HIGH);
 }
  
-void loop() {
-    delay(3000);
+void loop() {    
+    if (notificationCounter++ == notificationCountValue){
+        Serial.print(lowTemperatureTreshold);
+        Serial.print("---");
+        Serial.print(highTemperatureTreshold);
+        Serial.print("---");
+        Serial.print(isContiniousHeating);
+        Serial.print("---");
+        Serial.print(temperature);
+        Serial.print("---");
+        Serial.print(humidity);
+        Serial.print("---");
+        Serial.print(isHeating);
+        Serial.print("---");
+        Serial.println(IsOnRelay());
 
-    Serial.print(lowTemperatureTreshold);
-    Serial.print("---");
-    Serial.print(highTemperatureTreshold);
-    Serial.print("---");
-    Serial.print(isContiniousHeating);
-    Serial.print("---");
-    Serial.print(temperature);
-    Serial.print("---");
-    Serial.print(humidity);
-    Serial.print("---");
-    Serial.print(isHeating);
-    Serial.print("---");
-    Serial.println(IsOnRelay());
+        notificationCounter = 1;
+    }
+
+    delay(loopDelay);    
 
     WriteParameters();
     digitalWrite(RELE1_PIN, IsOnRelay());
