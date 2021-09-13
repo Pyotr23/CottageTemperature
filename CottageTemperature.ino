@@ -12,7 +12,9 @@ const char VERSION[] = "4.0";
 double loopDelay = 10000;
 // Периодичность уведомлений, в мс.
 double notificationDelay = 60000;
+// Количество итераций основного цикла, при котором прорисходит уведомление. 
 int notificationCountValue = ceil(notificationDelay / loopDelay);
+// Текущий номер итерации основного цикла.
 int notificationCounter = 0;
 
 // Значение нижнего температурного порога.
@@ -35,40 +37,28 @@ bool isHeating = false;
 // Флаг предыдущего состояния нагрева.
 bool wasHeating = false;
 
-void setup()
-{
+void setup() {
     Serial.begin(9600);  
+
     pinMode(RELE1_PIN, OUTPUT);
     pinMode(RELE2_PIN, OUTPUT);
+
     dhtModule.setup(DHT11_PIN, DHTesp::DHT11);  
-    digitalWrite(RELE1_PIN, HIGH);
-    digitalWrite(RELE2_PIN, HIGH);
+
+    digitalWriteToPorts(HIGH);
 }
  
 void loop() {    
-    if (notificationCounter++ == notificationCountValue){
-        Serial.print(lowTemperatureTreshold);
-        Serial.print("---");
-        Serial.print(highTemperatureTreshold);
-        Serial.print("---");
-        Serial.print(isContiniousHeating);
-        Serial.print("---");
-        Serial.print(temperature);
-        Serial.print("---");
-        Serial.print(humidity);
-        Serial.print("---");
-        Serial.print(isHeating);
-        Serial.print("---");
-        Serial.println(IsOnRelay());
 
+    if (notificationCounter++ == notificationCountValue){
+        Notify();
         notificationCounter = 1;
     }
 
     delay(loopDelay);    
 
-    WriteParameters();
-    digitalWrite(RELE1_PIN, IsOnRelay());
-    digitalWrite(RELE2_PIN, IsOnRelay());
+    RefreshParameters();
+    digitalWriteToPorts(IsOnRelay());    
 
     if (Serial.available() > 0){
         String command = GetSerialPortText();    
@@ -98,8 +88,33 @@ void loop() {
     } 
 }
 
+void digitalWriteToPorts(bool level){
+    digitalWrite(RELE1_PIN, level);
+    digitalWrite(RELE2_PIN, level);
+}
+
+// Отправить телеметрию в последовательный порт.
+void Notify(){
+    String message;
+
+    if (isContiniousHeating)
+        message += "Идёт непрерывный нагрев. ";
+    else{
+        if (isHeating)
+            message += "Идёт нагрев. ";
+        else
+            message += "В доме тепло. " ;       
+    }
+    
+    message += ("Температура = " + String(temperature) + "C ");
+    message += ("(диапазон " + String(lowTemperatureTreshold) + "/" + String(highTemperatureTreshold) + "), ");
+    message += ("влажность = " + String(humidity) + "%.");
+
+    Serial.println(message);
+}
+
 // Записать текущие значения температуры и влажности.
-void WriteParameters(){
+void RefreshParameters(){
   temperature = (int)dhtModule.getTemperature();
   humidity = (int)dhtModule.getHumidity();
 }
@@ -140,7 +155,7 @@ boolean IsOnRelay(){
     wasHeating = isHeating;
     isHeating = true; 
     if (wasHeating != isHeating) {  // сообщение, что начался нагрев  
-        Serial.println("Пошёл нагрев");
+        Serial.println("Начался нагрев");
         // digitalWrite(RELE1_PIN, LOW);
         // digitalWrite(RELE2_PIN, LOW);
     }      
