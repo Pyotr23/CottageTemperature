@@ -21,7 +21,7 @@ const int LOW_TEMPERATURE_TRESHOLD = 5;
 // Значение верхнего температурного порога
 const int HIGH_TEMPERATURE_TRESHOLD = 9;
 // Версия устройства
-const String VERSION = "3.1";     
+const String VERSION = "3.2";     
 
 // адрес SMTP-сервера
 const char* SMTP_SERVER_ADDRESS = "smtp.gmail.com";
@@ -52,6 +52,8 @@ const String WELCOME_MESSAGE = "The Box " + VERSION + " включен";
 const int PERIOD_WITHOUT_CHANGES_IN_HOURS = 2; 
 // количество миллисекунд в часе
 const long MS_IN_HOUR = 3600000;
+// количество отправленных писем с малым интервалом в начале работы
+const int START_MAIL_COUNT = 3;
 
 // количество итераций основного цикла без изменений режима до отправки письма 
 const long PAUSE_TICK_NUMBER = PERIOD_WITHOUT_CHANGES_IN_HOURS * MS_IN_HOUR / LONG_DELAY;
@@ -64,6 +66,8 @@ const int WIFI_CONNECTION_TICK_NUMBER = TIME_FOR_WIFI_CONNECTION / SHORT_DELAY;
 WiFiClientSecure wiFiClient;
 // значение счётчика, который считает итерации до отправки письма
 long counter;
+// значение счётчика отправленных писем с малым интервалом в начале работы
+int startCounter;
 // текущее положение дел
 String currentMode = DOWNTIME;
 // режим перед сравнением
@@ -83,6 +87,7 @@ void setup() {
   pinMode(RELAY_PIN, OUTPUT);
   digitalWrite(RELAY_PIN, HIGH);  // при использовании реле KY-019 необходимо разомкнуть его при старте  
   WriteParameters(); 
+  delay(SHORT_DELAY);
   SendEmail(GetInitialMessageText());
 }
  
@@ -93,13 +98,25 @@ void loop() {
 
   delay(LONG_DELAY); 
 
-  counter++;
-  if (counter >= PAUSE_TICK_NUMBER || !wasSendEmail){
+  if (startCounter < START_MAIL_COUNT) {
+    startCounter++;
     if (currentMode == DOWNTIME)
       SendEmail(GetMessageText(GOOD_CLIMATE));
     else 
-      SendEmail(GetMessageText(HEATING_CONTINUES));    
-  }                      
+      SendEmail(GetMessageText(HEATING_CONTINUES));  
+    return;  
+  }
+
+  counter++;
+  
+  if (counter < PAUSE_TICK_NUMBER && wasSendEmail){
+    return;
+  }
+  
+  if (currentMode == DOWNTIME)
+    SendEmail(GetMessageText(GOOD_CLIMATE));
+  else 
+    SendEmail(GetMessageText(HEATING_CONTINUES));    
 }
 
 // Вывести температуру, влажность и сообщение текущего режима.
