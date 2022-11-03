@@ -3,14 +3,6 @@
 #include <ESP8266WiFi.h>
 #include "settings.h"
 
-// // Для работоспособности программы необходимо определить со своими значениями следующие параметры:
-// const char* SSID = "НАЗВАНИЕ_WIFI_ТОЧКИ";
-// const char* SSID_PASSWORD = "ПАРОЛЬ_ОТ_WIFI";
-// const String GMAIL_FROM = "GMAIL_АДРЕС_С_КОТОРОГО_БУДУТ_ОТПРАВЛЯТЬСЯ_СООБЩЕНИЯ";
-// const char* GMAIL_PASSWORD = "ПАРОЛЬ_ОТ_ЭТОЙ_ПОЧТЫ";
-// const String MAIL_TO_FIRST = "ПЕРВЫЙ_АДРЕС_ПОЧТЫ_ДЛЯ_ПОЛУЧЕНИЯ_УВЕДОМЛЕНИЙ";
-// const String MAIL_TO_SECOND = "ВТОРОЙ_АДРЕС_ПОЧТЫ_ДЛЯ_ПОЛУЧЕНИЯ_УВЕДОМЛЕНИЙ";
-
 // вывод для управления реле
 const uint8_t RELAY_PIN = D5;
 // вывод для управления датчиком влажности и температуры
@@ -21,12 +13,8 @@ const int LOW_TEMPERATURE_TRESHOLD = 5;
 // Значение верхнего температурного порога
 const int HIGH_TEMPERATURE_TRESHOLD = 9;
 // Версия устройства
-const String VERSION = "3.2";     
+const String VERSION = "3.3";     
 
-// адрес SMTP-сервера
-const char* SMTP_SERVER_ADDRESS = "smtp.gmail.com";
-// порт подключения к SMTP-серверу
-const int SMTP_SERVER_PORT = 465;
 // время (в мс) ожидания ответа от сервера, по истечении которого закрывается подключение
 const int DELAY_FOR_RESPONSE = 10000;
 
@@ -235,21 +223,21 @@ void SendEmail(String text)
   }
 
   Serial.println(F("Отправка логина"));
-  wiFiClient.println(base64::encode(GMAIL_FROM));
+  wiFiClient.println(base64::encode(SMTP_SERVER_LOGIN));
   if (!IsReceiveResponse()){
     wasSendEmail = false;
     return;
   }
 
   Serial.println(F("Отправка пароля"));
-  wiFiClient.println(base64::encode(GMAIL_PASSWORD));
+  wiFiClient.println(base64::encode(SMTP_SERVER_PASSWORD));
   if (!IsReceiveResponse()){
     wasSendEmail = false;
     return;
   }
     
   Serial.println(F("Отправка адреса почты автора письма"));
-  String mailFrom = String("MAIL FROM: <" + GMAIL_FROM + ">");
+  String mailFrom = String("MAIL FROM: <" + SMTP_SERVER_LOGIN + ">");
   wiFiClient.println(mailFrom);
   if (!IsReceiveResponse()){
     wasSendEmail = false;
@@ -280,7 +268,7 @@ void SendEmail(String text)
   // "Home Alone Group" - название группы получателей. Будет отображаться в строке получателей.
   // wiFiClient.println(F("To: Home Alone Group<totally@made.up>")); 
   
-  wiFiClient.println(String("From: " + GMAIL_FROM));
+  wiFiClient.println(String("From: " + SMTP_SERVER_LOGIN));
   String subject = "Subject: The Box " + VERSION + "\r\n";
   wiFiClient.println(subject);
   wiFiClient.println(text);
